@@ -95,7 +95,7 @@ class Generator:
     def _generate_answer(self, question: str, all_contexts: list, sem_contexts: list, graph_contexts: list) -> dict:
         """Build structured prompt and call LLM."""
         # Truncate chunks to avoid overflowing Llama context window
-        sem_str = "\n".join([f"  - {ctx[:600]}" for ctx in sem_contexts]) or "  (none)"
+        sem_str = "\n".join([f"  - {ctx[:800]}" for ctx in sem_contexts]) or "  (none)"
         graph_str = "\n".join([f"  - {ctx}" for ctx in graph_contexts]) or "  (none)"
 
         prompt = (

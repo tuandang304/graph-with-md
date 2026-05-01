@@ -66,17 +66,27 @@ class BaselineEmbedder:
                 batch_meta = all_metadata[i:i+batch_size]
                 batch_id = all_ids[i:i+batch_size]
 
+                valid_texts = []
+                valid_metas = []
+                valid_ids = []
                 embeddings = []
-                for text in batch_text:
-                    emb = self.ollama.get_embeddings(model=self.model_name, prompt=text, keep_alive=300)
-                    embeddings.append(emb)
+
+                for idx, text in enumerate(batch_text):
+                    try:
+                        emb = self.ollama.get_embeddings(model=self.model_name, prompt=text, keep_alive=300)
+                        embeddings.append(emb)
+                        valid_texts.append(text)
+                        valid_metas.append(batch_meta[idx])
+                        valid_ids.append(batch_id[idx])
+                    except Exception:
+                        pass  # Skip failed chunk
 
                 if embeddings:
                     self.collection.upsert(
-                        documents=batch_text,
+                        documents=valid_texts,
                         embeddings=embeddings,
-                        metadatas=batch_meta,
-                        ids=batch_id
+                        metadatas=valid_metas,
+                        ids=valid_ids
                     )
         except Exception as e:
             print(f"Baseline embedder error: {e}")

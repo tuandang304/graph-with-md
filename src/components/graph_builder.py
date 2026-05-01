@@ -31,7 +31,7 @@ class GraphBuilder:
             "Do not include any wrapping markdown formatting like ```json. Limit to top 20 relationships."
         )
 
-    def build_graph_for_file(self, filename: str):
+    def build_graph_for_file(self, filename: str, keep_alive: int = 0):
         filepath = os.path.join(self.input_dir, filename)
         paper_id = filename.replace('.md', '')
         output_filepath = os.path.join(self.output_dir, f"{paper_id}_graph.json")
@@ -50,7 +50,8 @@ class GraphBuilder:
             response = self.ollama.generate(
                 model=self.model_name,
                 prompt=prompt,
-                system=self.system_prompt
+                system=self.system_prompt,
+                keep_alive=keep_alive
             )
 
             # Strip excess markdown from LLM output
@@ -80,8 +81,12 @@ class GraphBuilder:
     def process_all(self):
         files = [f for f in os.listdir(self.input_dir) if f.endswith('.md')]
         print(f"Starting Knowledge Graph construction with {self.model_name}...")
-        for file in tqdm(files):
-            self.build_graph_for_file(file)
+        try:
+            for file in tqdm(files):
+                # keep_alive=300: hold model in VRAM across batch, unload once at end
+                self.build_graph_for_file(file, keep_alive=300)
+        finally:
+            self.ollama.unload_model(self.model_name)
 
 if __name__ == "__main__":
     _root = os.path.join(os.path.dirname(__file__), '..', '..')
