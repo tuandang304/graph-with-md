@@ -1,0 +1,11 @@
+requests
+chromadb
+networkx
+pandas
+tqdm
+ragas
+openai
+python-dotenv
+datasets
+langchain-openai
+langchain-text-splitters

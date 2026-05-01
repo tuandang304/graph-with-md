@@ -1,0 +1,17 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(.venv/Scripts/python.exe -c \"import datasets; print\\(datasets.__version__\\)\")",
+      "Bash(.venv/Scripts/python.exe -m pip install datasets)",
+      "Bash(uv pip *)",
+      "Bash(uv run python -c ' *)",
+      "Bash(uv run *)",
+      "Bash(tasklist)",
+      "Bash(tasklist /FI \"PID eq 30684\")",
+      "Bash(python3 *)",
+      "Bash(mkdir -p qasper/parsed qasper/parsed_txt qasper/graph qasper/embeddings/baseline qasper/embeddings/graphnomd qasper/embeddings/graphmd qasper/results)",
+      "Bash(mkdir -p hotpotqa/raw hotpotqa/parsed hotpotqa/parsed_txt hotpotqa/graph hotpotqa/embeddings/baseline hotpotqa/embeddings/graphnomd hotpotqa/embeddings/graphmd hotpotqa/results)",
+      "Bash(mkdir -p pubmedqa/parsed pubmedqa/parsed_txt pubmedqa/graph pubmedqa/embeddings/baseline pubmedqa/embeddings/graphnomd pubmedqa/embeddings/graphmd pubmedqa/results/mini)"
+    ]
+  }
+}

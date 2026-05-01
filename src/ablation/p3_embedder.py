@@ -1,0 +1,150 @@
+import os
+import sys
+import json
+import chromadb
+from tqdm import tqdm
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+
+sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
+from src.core.ollama_manager import OllamaManager
+
+class P3Embedder:
+    """
+    Graph no markdown: Fixed-size Chunking + Knowledge Graph.
+    Keeps Qwen-extracted graph relations, but uses static chunking (1000 chars)
+    on raw text instead of markdown section boundaries.
+    """
+    def __init__(self, ollama_manager: OllamaManager, txt_dir: str, graph_dir: str, db_dir: str, model_name: str = "bge-m3"):
+        self.ollama = ollama_manager
+        self.txt_dir = txt_dir
+        self.graph_dir = graph_dir
+        self.db_dir = db_dir
+        self.model_name = model_name
+
+        if not os.path.exists(self.db_dir):
+            os.makedirs(self.db_dir, exist_ok=True)
+
+        self.chroma_client = chromadb.PersistentClient(path=self.db_dir)
+        # Use same collection name as Pipeline 1 to reuse Generator
+        self.collection = self.chroma_client.get_or_create_collection(
+            name="qasper_graph_rag",
+            metadata={"hnsw:space": "cosine"}
+        )
+
+        self.text_splitter = RecursiveCharacterTextSplitter(
+            chunk_size=1000,
+            chunk_overlap=200,
+            length_function=len
+        )
+
+    def process_all(self):
+        print(f"Starting Pipeline 3 vectorization with {self.model_name}...")
+
+        all_chunks = []
+        all_metadata = []
+        all_ids = []
+
+        # 1. Read Baseline Text (Fixed-size chunks)
+        txt_files = [f for f in os.listdir(self.txt_dir) if f.endswith('.txt')]
+        for file in txt_files:
+            paper_id = file.replace('.txt', '')
+            with open(os.path.join(self.txt_dir, file), 'r', encoding='utf-8') as f:
+                text = f.read()
+
+            chunks = self.text_splitter.split_text(text)
+
+            for idx, chunk in enumerate(chunks):
+                all_chunks.append(chunk)
+                all_metadata.append({"paper_id": paper_id, "type": "baseline_chunk"})
+                all_ids.append(f"{paper_id}_base_{idx}")
+
+        # 2. Read Graph Edges
+        graph_files = [f for f in os.listdir(self.graph_dir) if f.endswith('_graph.json')]
+        for file in graph_files:
+            paper_id = file.replace('_graph.json', '')
+            with open(os.path.join(self.graph_dir, file), 'r', encoding='utf-8') as f:
+                try:
+                    graph_data = json.load(f)
+
+                    if isinstance(graph_data, dict) and "raw_output" in graph_data:
+                        raw = graph_data["raw_output"]
+                        rescued_list = []
+                        for line in raw.split('\n'):
+                            if line.strip().startswith('{'):
+                                try:
+                                    rescued_list.append(json.loads(line.strip()))
+                                except json.JSONDecodeError:
+                                    pass
+                        graph_data = rescued_list
+
+                    if isinstance(graph_data, list):
+                        for idx, rel in enumerate(graph_data):
+                            src = rel.get("source", "")
+                            tgt = rel.get("target", "")
+                            r = rel.get("relation", "")
+                            if src and tgt and r:
+                                chunk = f"Graph Relation: {src} -> {r} -> {tgt}"
+                                all_chunks.append(chunk)
+                                all_metadata.append({"paper_id": paper_id, "type": "graph_edge"})
+                                all_ids.append(f"{paper_id}_edge_{idx}")
+                except Exception:
+                    pass
+
+        # Filter already-embedded chunks to allow resume
+        existing_data = self.collection.get(include=[])
+        existing_ids = set(existing_data['ids']) if existing_data and 'ids' in existing_data else set()
+
+        filtered_chunks = []
+        filtered_metadata = []
+        filtered_ids = []
+
+        for ch, meta, ch_id in zip(all_chunks, all_metadata, all_ids):
+            if ch_id not in existing_ids:
+                filtered_chunks.append(ch)
+                filtered_metadata.append(meta)
+                filtered_ids.append(ch_id)
+
+        total_chunks = len(filtered_chunks)
+        print(f"Total {len(all_chunks)} chunks, already embedded {len(existing_ids)}, {total_chunks} remaining (P3 Mixed).")
+
+        if total_chunks == 0:
+            print("All chunks already embedded for P3.")
+            return
+
+        batch_size = 50
+        try:
+            for i in tqdm(range(0, total_chunks, batch_size), desc="P3 Batch Embed"):
+                batch_text = filtered_chunks[i:i+batch_size]
+                batch_meta = filtered_metadata[i:i+batch_size]
+                batch_id = filtered_ids[i:i+batch_size]
+
+                valid_texts = []
+                valid_metas = []
+                valid_ids = []
+                embeddings = []
+
+                for idx, text in enumerate(batch_text):
+                    try:
+                        safe_text = text[:15000]
+                        emb = self.ollama.get_embeddings(model=self.model_name, prompt=safe_text, keep_alive=300)
+                        embeddings.append(emb)
+                        valid_texts.append(safe_text)
+                        valid_metas.append(batch_meta[idx])
+                        valid_ids.append(batch_id[idx])
+                    except Exception as inner_e:
+                        pass  # Skip failed chunk
+
+                if embeddings:
+                    self.collection.upsert(
+                        documents=valid_texts,
+                        embeddings=embeddings,
+                        metadatas=valid_metas,
+                        ids=valid_ids
+                    )
+        except Exception as e:
+            print(f"P3 embedder outer loop error: {e}")
+        finally:
+            self.ollama.unload_model(model=self.model_name)
+
+if __name__ == "__main__":
+    pass
