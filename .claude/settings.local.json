@@ -11,7 +11,9 @@
       "Bash(python3 *)",
       "Bash(mkdir -p qasper/parsed qasper/parsed_txt qasper/graph qasper/embeddings/baseline qasper/embeddings/graphnomd qasper/embeddings/graphmd qasper/results)",
       "Bash(mkdir -p hotpotqa/raw hotpotqa/parsed hotpotqa/parsed_txt hotpotqa/graph hotpotqa/embeddings/baseline hotpotqa/embeddings/graphnomd hotpotqa/embeddings/graphmd hotpotqa/results)",
-      "Bash(mkdir -p pubmedqa/parsed pubmedqa/parsed_txt pubmedqa/graph pubmedqa/embeddings/baseline pubmedqa/embeddings/graphnomd pubmedqa/embeddings/graphmd pubmedqa/results/mini)"
+      "Bash(mkdir -p pubmedqa/parsed pubmedqa/parsed_txt pubmedqa/graph pubmedqa/embeddings/baseline pubmedqa/embeddings/graphnomd pubmedqa/embeddings/graphmd pubmedqa/results/mini)",
+      "Bash(python -c ' *)",
+      "WebSearch"
     ]
   }
 }
