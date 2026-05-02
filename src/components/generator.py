@@ -18,11 +18,18 @@ class Generator:
     Fallback (Graph no markdown): collection has baseline_chunk not semantic_section,
     so Channel 1 filter returns empty → falls back to unfiltered retrieval.
     """
-    def __init__(self, ollama_manager: OllamaManager, db_dir: str, embed_model: str = "bge-m3", llm_model: str = "llama3.1:8b"):
+    DEFAULT_SYSTEM_PROMPT = (
+        "You are a precise academic research assistant. "
+        "Answer questions strictly based on the provided text evidence and relational facts. "
+        "Do not add information beyond what is given. Answer in English."
+    )
+
+    def __init__(self, ollama_manager: OllamaManager, db_dir: str, embed_model: str = "bge-m3", llm_model: str = "llama3.1:8b", system_prompt: str = None):
         self.ollama = ollama_manager
         self.db_dir = db_dir
         self.embed_model = embed_model
         self.llm_model = llm_model
+        self._system_prompt = system_prompt if system_prompt is not None else self.DEFAULT_SYSTEM_PROMPT
 
         self.chroma_client = chromadb.PersistentClient(path=self.db_dir)
         try:
@@ -107,17 +114,11 @@ class Generator:
             f"\"The context does not contain sufficient information.\"\n\n"
             f"Answer:"
         )
-        system_prompt = (
-            "You are a precise academic research assistant. "
-            "Answer questions strictly based on the provided text evidence and relational facts. "
-            "Do not add information beyond what is given. Answer in English."
-        )
-
         print(f"[Generation] Generating response with model {self.llm_model}...")
         answer = self.ollama.generate(
             model=self.llm_model,
             prompt=prompt,
-            system=system_prompt,
+            system=self._system_prompt,
             keep_alive=0  # CRITICAL
         )
 

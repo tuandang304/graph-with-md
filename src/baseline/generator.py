@@ -9,11 +9,14 @@ class BaselineGenerator:
     """
     RAG Generator for Baseline pipeline (fixed-size chunks, no graph).
     """
-    def __init__(self, ollama_manager: OllamaManager, db_dir: str, embed_model: str = "bge-m3", llm_model: str = "llama3.1:8b"):
+    DEFAULT_SYSTEM_PROMPT = "You are an AI assistant. Answer based on the provided context. If unavailable, say Unknown."
+
+    def __init__(self, ollama_manager: OllamaManager, db_dir: str, embed_model: str = "bge-m3", llm_model: str = "llama3.1:8b", system_prompt: str = None):
         self.ollama = ollama_manager
         self.db_dir = db_dir
         self.embed_model = embed_model
         self.llm_model = llm_model
+        self._system_prompt = system_prompt if system_prompt is not None else self.DEFAULT_SYSTEM_PROMPT
 
         self.chroma_client = chromadb.PersistentClient(path=self.db_dir)
         try:
@@ -34,10 +37,7 @@ class BaselineGenerator:
         contexts = results.get("documents", [[]])[0]
         context_str = "\n".join([f"- {ctx}" for ctx in contexts])
 
-        # Call Generator, then free VRAM
         prompt = f"Context:\n{context_str}\n\nQuestion: {question}\nAnswer:"
-        system_prompt = "You are an AI assistant. Answer based on the provided context. If unavailable, say Unknown."
-
-        answer = self.ollama.generate(model=self.llm_model, prompt=prompt, system=system_prompt, keep_alive=0)
+        answer = self.ollama.generate(model=self.llm_model, prompt=prompt, system=self._system_prompt, keep_alive=0)
 
         return {"answer": answer.strip(), "context": contexts}

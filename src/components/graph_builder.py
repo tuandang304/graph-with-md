@@ -12,7 +12,16 @@ class GraphBuilder:
     Component 2: Extracts vertices and edges from Markdown documents.
     Uses Ollama Manager with keep_alive=0 via Qwen model.
     """
-    def __init__(self, ollama_manager: OllamaManager, input_dir: str, output_dir: str, model_name: str = "qwen2.5:7b"):
+    DEFAULT_SYSTEM_PROMPT = (
+        "You are an expert NLP AI extracting knowledge graph mappings. "
+        "Given the markdown text (which may contain text and references to figure captions), "
+        "extract the most important entities and their direct relationships. "
+        "Output EXCLUSIVELY a JSON array format, where each object is: "
+        '{"source": "Entity A", "target": "Entity B", "relation": "relationship type"}. '
+        "Do not include any wrapping markdown formatting like ```json. Limit to top 20 relationships."
+    )
+
+    def __init__(self, ollama_manager: OllamaManager, input_dir: str, output_dir: str, model_name: str = "qwen2.5:7b", system_prompt: str = None):
         self.ollama = ollama_manager
         self.input_dir = input_dir
         self.output_dir = output_dir
@@ -22,14 +31,7 @@ class GraphBuilder:
         if not os.path.exists(self.output_dir):
             os.makedirs(self.output_dir, exist_ok=True)
 
-        self.system_prompt = (
-            "You are an expert NLP AI extracting knowledge graph mappings. "
-            "Given the markdown text (which may contain text and references to figure captions), "
-            "extract the most important entities and their direct relationships. "
-            "Output EXCLUSIVELY a JSON array format, where each object is: "
-            '{"source": "Entity A", "target": "Entity B", "relation": "relationship type"}. '
-            "Do not include any wrapping markdown formatting like ```json. Limit to top 20 relationships."
-        )
+        self.system_prompt = system_prompt if system_prompt is not None else self.DEFAULT_SYSTEM_PROMPT
 
     def build_graph_for_file(self, filename: str, keep_alive: int = 0):
         filepath = os.path.join(self.input_dir, filename)

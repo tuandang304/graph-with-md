@@ -1,11 +1,19 @@
 """
 NarrativeQA Benchmark — Baseline vs Graph no markdown vs Graph with markdown.
-Dataset: deepmind/narrativeqa (validation split) — 200 QA samples via HuggingFace.
-Documents: Human-written summaries (~600 words each) used as proxy for full story texts.
+Dataset: deepmind/narrativeqa test split — 500 QA pairs (seed=42).
+Stories: Gutenberg books + movie scripts. One .md/.txt file per story_id.
+
+Modes:
+  Full (default): 500 samples, seed=42, full ingestion + generation + RAGAS.
+  Mini:           10 samples,  seed=99, skips ingestion (requires existing embeddings).
+                  Run: uv run python experiments/narrativeqa_benchmark.py mini
+
 Run: uv run python experiments/narrativeqa_benchmark.py
+     uv run python experiments/narrativeqa_benchmark.py mini
 """
 import os
 import sys
+import re
 import json
 import random
 import pandas as pd
@@ -27,6 +35,8 @@ from src.ablation.p3_embedder import P3Embedder
 from src.components.evaluator import Evaluator
 
 # --- CONFIG ---
+MINI = "mini" in sys.argv
+
 DATA_ROOT           = os.path.join(_REPO_ROOT, "data", "narrativeqa")
 PARSED_DIR          = os.path.join(DATA_ROOT, "parsed")
 GRAPH_DIR           = os.path.join(DATA_ROOT, "graph")
@@ -35,11 +45,40 @@ BASE_PARSED_DIR     = os.path.join(DATA_ROOT, "parsed_txt")
 BASE_EMBED_DIR      = os.path.join(DATA_ROOT, "embeddings", "baseline")
 GRAPHNOMD_EMBED_DIR = os.path.join(DATA_ROOT, "embeddings", "graphnomd")
 RESULTS_DIR         = os.path.join(DATA_ROOT, "results")
+MINI_RESULTS_DIR    = os.path.join(DATA_ROOT, "results", "mini")
 
-SAMPLE_SIZE = 200
-SEED        = 42
+SAMPLE_SIZE = 10  if MINI else 500
+SEED        = 99  if MINI else 42
 
-for d in [PARSED_DIR, GRAPH_DIR, EMBED_DIR, BASE_PARSED_DIR, BASE_EMBED_DIR, GRAPHNOMD_EMBED_DIR, RESULTS_DIR]:
+# Narrative-domain prompts
+NARRATIVE_GRAPH_PROMPT = (
+    "You are an expert knowledge graph extractor for narrative text. "
+    "Given story passages (books, scripts), extract the most important entities and relationships. "
+    "Focus on: characters and their actions, character relationships, "
+    "locations, events, cause-and-effect plot connections. "
+    "Output EXCLUSIVELY a JSON array: "
+    '[{"source": "...", "target": "...", "relation": "..."}]. '
+    "No markdown code blocks. Limit to top 20 relationships."
+)
+
+NARRATIVE_SYSTEM_PROMPT = (
+    "You are a precise reading comprehension assistant. "
+    "Answer questions strictly based on the provided story passages and knowledge graph facts. "
+    "Do not add information beyond what is given. Answer in English."
+)
+
+NARRATIVE_BASELINE_PROMPT = (
+    "You are a reading comprehension assistant. "
+    "Answer based on the provided context. If the context does not contain the answer, say Unknown."
+)
+
+# Hard caps — prevent OOM on very large books
+RAW_TEXT_CHAR_LIMIT = 200_000
+MAX_SECTIONS        = 40
+FALLBACK_WINDOW     = 3_000
+
+for d in [PARSED_DIR, GRAPH_DIR, EMBED_DIR, BASE_PARSED_DIR, BASE_EMBED_DIR,
+          GRAPHNOMD_EMBED_DIR, RESULTS_DIR, MINI_RESULTS_DIR]:
     os.makedirs(d, exist_ok=True)
 
 
@@ -47,57 +86,110 @@ for d in [PARSED_DIR, GRAPH_DIR, EMBED_DIR, BASE_PARSED_DIR, BASE_EMBED_DIR, GRA
 #  DATA                                                                #
 # ------------------------------------------------------------------ #
 
-def load_and_prepare() -> list:
+def _safe_story_id(raw_id: str) -> str:
+    """Strip path separators so story_id is safe as filename."""
+    return re.sub(r'[/\\:*?"<>|]', "_", raw_id)
+
+
+def _split_narrative_sections(raw_text: str, kind: str) -> list:
+    """
+    Returns list of (section_title, section_text) pairs.
+    Detects chapter/scene markers; falls back to fixed windows.
+    Caps at MAX_SECTIONS.
+    """
+    text = raw_text[:RAW_TEXT_CHAR_LIMIT]
+
+    if kind == "gutenberg":
+        pattern = re.compile(r'(?:^|\n)((?:CHAPTER|Chapter)\s+(?:[IVXLCDM]+|\d+|THE\s+\w+)[^\n]*)')
+    else:
+        pattern = re.compile(r'(?:^|\n)((?:INT\.|EXT\.|ACT\s+\d+)[^\n]*)')
+
+    splits = list(pattern.finditer(text))
+
+    if len(splits) < 2:
+        sections = []
+        for i, start in enumerate(range(0, len(text), FALLBACK_WINDOW)):
+            sections.append((f"Part {i + 1}", text[start:start + FALLBACK_WINDOW]))
+            if len(sections) >= MAX_SECTIONS:
+                break
+        return sections
+
+    sections = []
+    for i, match in enumerate(splits[:MAX_SECTIONS]):
+        title = match.group(1).strip()
+        start = match.end()
+        end   = splits[i + 1].start() if i + 1 < len(splits) else len(text)
+        body  = text[start:end].strip()
+        if body:
+            sections.append((title, body))
+
+    return sections if sections else [("Text", text[:FALLBACK_WINDOW])]
+
+
+def load_narrativeqa() -> list:
     from datasets import load_dataset
-    print("[Data] Loading NarrativeQA (validation split)...")
-    ds   = load_dataset("deepmind/narrativeqa", split="validation")
+    print(f"[Data] Loading NarrativeQA test split — {'MINI' if MINI else 'full'} mode...")
+    ds   = load_dataset("deepmind/narrativeqa", split="test", trust_remote_code=True)
     data = list(ds)
-    print(f"[Data] {len(data)} QA pairs total. Sampling {SAMPLE_SIZE} (seed={SEED})...")
-
     random.seed(SEED)
-    sampled = random.sample(data, min(SAMPLE_SIZE, len(data)))
+    if SAMPLE_SIZE and len(data) > SAMPLE_SIZE:
+        data = random.sample(data, SAMPLE_SIZE)
+    print(f"[Data] Using {len(data)} samples (seed={SEED}).")
+    return data
 
-    # Collect unique documents for sampled QA pairs
-    needed_docs: dict = {}
-    for item in sampled:
-        doc = item["document"]
-        if doc["id"] not in needed_docs:
-            needed_docs[doc["id"]] = doc
 
-    print(f"[Prep] Writing files for {len(needed_docs)} unique documents...")
-    for doc_id, doc in tqdm(needed_docs.items(), desc="Writing docs"):
-        title   = doc["summary"]["title"] or doc_id
-        summary = doc["summary"]["text"].strip()
-        safe_id = doc_id  # IDs are hex hashes, safe for filenames
+def prepare_files(samples: list) -> list:
+    """
+    Write one .md + one .txt per story_id (dedup across QA pairs sharing same story).
+    Return qa_list with one entry per QA pair.
+    """
+    print(f"\n[Prep] Writing context files ({len(samples)} samples)...")
+    qa_list      = []
+    seen_stories = set()
 
-        md_path = os.path.join(PARSED_DIR, f"{safe_id}.md")
+    for item in tqdm(samples, desc="Writing files"):
+        doc      = item["document"]
+        story_id = _safe_story_id(doc["id"])
+        kind     = doc.get("kind", "gutenberg")
+        raw_text = doc.get("text", "") or ""
+        summary  = (doc.get("summary") or {}).get("text", "") or ""
+        title    = (doc.get("summary") or {}).get("title", "") or story_id
+
+        answers      = item.get("answers", [])
+        ground_truth = answers[0]["text"] if answers else ""
+        q_uid        = item["question"].get("uid", "") if isinstance(item["question"], dict) else str(id(item))
+        question     = item["question"]["text"] if isinstance(item["question"], dict) else str(item["question"])
+        qa_id        = f"{story_id}__{q_uid}"
+
+        qa_list.append({
+            "id":           qa_id,
+            "story_id":     story_id,
+            "question":     question,
+            "ground_truth": ground_truth,
+        })
+
+        if story_id in seen_stories:
+            continue
+        seen_stories.add(story_id)
+
+        # Graph with markdown: structured .md with detected sections
+        md_path = os.path.join(PARSED_DIR, f"{story_id}.md")
         if not os.path.exists(md_path):
-            paragraphs = [p.strip() for p in summary.split("\n") if p.strip()]
-            if not paragraphs:
-                paragraphs = [summary]
             md = f"# {title}\n\n"
-            for i, para in enumerate(paragraphs, 1):
-                md += f"## Part {i}\n{para}\n\n"
+            if summary:
+                md += f"## Summary\n{summary}\n\n"
+            for sec_title, sec_body in _split_narrative_sections(raw_text, kind):
+                md += f"## {sec_title}\n{sec_body}\n\n"
             with open(md_path, "w", encoding="utf-8") as f:
                 f.write(md)
 
-        txt_path = os.path.join(BASE_PARSED_DIR, f"{safe_id}.txt")
+        # Baseline / Graph no markdown: flat .txt
+        txt_path = os.path.join(BASE_PARSED_DIR, f"{story_id}.txt")
         if not os.path.exists(txt_path):
             with open(txt_path, "w", encoding="utf-8") as f:
-                f.write(summary)
+                f.write(raw_text[:RAW_TEXT_CHAR_LIMIT])
 
-    qa_list = []
-    for i, item in enumerate(sampled):
-        answers = item["answers"]
-        gt      = answers[0]["text"] if answers else ""
-        q_text  = item["question"]["text"] if isinstance(item["question"], dict) else item["question"]
-        qa_list.append({
-            "id":           f"{item['document']['id']}_{i}",
-            "question":     q_text,
-            "ground_truth": gt,
-        })
-
-    print(f"[Data] {len(qa_list)} QA pairs prepared.")
+    print(f"[Prep] {len(seen_stories)} unique stories written.")
     return qa_list
 
 
@@ -113,22 +205,26 @@ def _count(db_dir: str, col: str) -> int:
 
 
 def build_graphs(ollama: OllamaManager):
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print(">>> GRAPH BUILDING — Qwen 7B (NARRATIVEQA) <<<")
-    print("="*50)
+    print("=" * 50)
     md_files   = [f for f in os.listdir(PARSED_DIR) if f.endswith(".md")]
     done_files = [f for f in os.listdir(GRAPH_DIR)  if f.endswith("_graph.json")]
     if md_files and len(done_files) >= len(md_files):
         print(f"Graphs complete ({len(done_files)} files). Skipping.")
         return
     print(f"Building graphs: {len(done_files)}/{len(md_files)} done...")
-    GraphBuilder(ollama, PARSED_DIR, GRAPH_DIR, model_name="qwen2.5:7b").process_all()
+    GraphBuilder(
+        ollama, PARSED_DIR, GRAPH_DIR,
+        model_name="qwen2.5:7b",
+        system_prompt=NARRATIVE_GRAPH_PROMPT,
+    ).process_all()
 
 
 def ingest_baseline(ollama: OllamaManager):
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print(">>> INGESTION — Baseline (NARRATIVEQA) <<<")
-    print("="*50)
+    print("=" * 50)
     n = _count(BASE_EMBED_DIR, "baseline_rag")
     if n > 0:
         print(f"Baseline DB exists ({n} chunks). Skipping.")
@@ -137,25 +233,31 @@ def ingest_baseline(ollama: OllamaManager):
 
 
 def ingest_graphnomd(ollama: OllamaManager):
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print(">>> INGESTION — Graph no markdown (NARRATIVEQA) <<<")
-    print("="*50)
+    print("=" * 50)
     n = _count(GRAPHNOMD_EMBED_DIR, "qasper_graph_rag")
     if n > 0:
         print(f"Graph no markdown DB exists ({n} chunks). Skipping.")
         return
-    P3Embedder(ollama, txt_dir=BASE_PARSED_DIR, graph_dir=GRAPH_DIR,
-               db_dir=GRAPHNOMD_EMBED_DIR, model_name="bge-m3").process_all()
+    P3Embedder(
+        ollama,
+        txt_dir=BASE_PARSED_DIR,
+        graph_dir=GRAPH_DIR,
+        db_dir=GRAPHNOMD_EMBED_DIR,
+        model_name="bge-m3",
+    ).process_all()
 
 
 def ingest_graphmd(ollama: OllamaManager):
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print(">>> INGESTION — Graph with markdown (NARRATIVEQA) <<<")
-    print("="*50)
+    print("=" * 50)
     n = _count(EMBED_DIR, "qasper_graph_rag")
     if n > 0:
         print(f"Graph with markdown DB exists ({n} chunks). Skipping.")
         return
+    print("[Embedder] BGE-M3 — semantic sections + graph edges...")
     Embedder(ollama, PARSED_DIR, GRAPH_DIR, EMBED_DIR, model_name="bge-m3").process_all()
 
 
@@ -164,6 +266,7 @@ def ingest_graphmd(ollama: OllamaManager):
 # ------------------------------------------------------------------ #
 
 def _load_existing_raw(path: str) -> tuple:
+    """Load JSONL checkpoint. Return (records_list, done_ids_set)."""
     if not os.path.exists(path):
         return [], set()
     records, done_ids = [], set()
@@ -179,18 +282,31 @@ def _load_existing_raw(path: str) -> tuple:
 
 
 def run_generation(ollama: OllamaManager, qa_list: list):
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print(f">>> GENERATION — All 3 Pipelines ({len(qa_list)} questions) <<<")
-    print("="*50)
+    print("=" * 50)
 
-    baseline_gen  = BaselineGenerator(ollama, BASE_EMBED_DIR,   embed_model="bge-m3", llm_model="llama3.1:8b")
-    graphnomd_gen = Generator(ollama, GRAPHNOMD_EMBED_DIR,       embed_model="bge-m3", llm_model="llama3.1:8b")
-    graphmd_gen   = Generator(ollama, EMBED_DIR,                 embed_model="bge-m3", llm_model="llama3.1:8b")
+    baseline_gen = BaselineGenerator(
+        ollama, BASE_EMBED_DIR,
+        embed_model="bge-m3", llm_model="llama3.1:8b",
+        system_prompt=NARRATIVE_BASELINE_PROMPT,
+    )
+    graphnomd_gen = Generator(
+        ollama, GRAPHNOMD_EMBED_DIR,
+        embed_model="bge-m3", llm_model="llama3.1:8b",
+        system_prompt=NARRATIVE_SYSTEM_PROMPT,
+    )
+    graphmd_gen = Generator(
+        ollama, EMBED_DIR,
+        embed_model="bge-m3", llm_model="llama3.1:8b",
+        system_prompt=NARRATIVE_SYSTEM_PROMPT,
+    )
 
+    out_dir   = MINI_RESULTS_DIR if MINI else RESULTS_DIR
     raw_paths = {
-        "Baseline":            os.path.join(RESULTS_DIR, "baseline_raw.jsonl"),
-        "Graph no markdown":   os.path.join(RESULTS_DIR, "graphnomd_raw.jsonl"),
-        "Graph with markdown": os.path.join(RESULTS_DIR, "graphmd_raw.jsonl"),
+        "Baseline":            os.path.join(out_dir, "baseline_raw.jsonl"),
+        "Graph no markdown":   os.path.join(out_dir, "graphnomd_raw.jsonl"),
+        "Graph with markdown": os.path.join(out_dir, "graphmd_raw.jsonl"),
     }
 
     baseline_results,  baseline_done  = _load_existing_raw(raw_paths["Baseline"])
@@ -198,7 +314,7 @@ def run_generation(ollama: OllamaManager, qa_list: list):
     graphmd_results,   graphmd_done   = _load_existing_raw(raw_paths["Graph with markdown"])
 
     if baseline_done or graphnomd_done or graphmd_done:
-        print(f"Resuming: Baseline={len(baseline_done)}, GraphNoMD={len(graphnomd_done)}, GraphMD={len(graphmd_done)} done.")
+        print(f"Resuming: Baseline={len(baseline_done)}, GraphNoMD={len(graphnomd_done)}, GraphMD={len(graphmd_done)} already done.")
 
     f_base = open(raw_paths["Baseline"],            "a", encoding="utf-8")
     f_nomd = open(raw_paths["Graph no markdown"],   "a", encoding="utf-8")
@@ -206,7 +322,7 @@ def run_generation(ollama: OllamaManager, qa_list: list):
 
     try:
         for i, qa in enumerate(qa_list):
-            print(f"\n[{i+1}/{len(qa_list)}] Q: {qa['question'][:80]}")
+            print(f"\n[{i+1}/{len(qa_list)}] Q: {qa['question'][:100]}")
             for gen, store, done_ids, fh, top_k, label in [
                 (baseline_gen,  baseline_results,  baseline_done,  f_base, 5,  "Baseline"),
                 (graphnomd_gen, graphnomd_results, graphnomd_done, f_nomd, 10, "Graph no markdown"),
@@ -219,6 +335,7 @@ def run_generation(ollama: OllamaManager, qa_list: list):
                     res = gen.query(qa["question"], top_k=top_k)
                     record = {
                         "id":           qa["id"],
+                        "story_id":     qa["story_id"],
                         "question":     qa["question"],
                         "answer":       res["answer"],
                         "contexts":     res["context"],
@@ -244,10 +361,11 @@ def run_generation(ollama: OllamaManager, qa_list: list):
 # ------------------------------------------------------------------ #
 
 def run_ragas(baseline_results, graphnomd_results, graphmd_results):
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print(">>> RAGAS EVALUATION (GPT-4o-mini) <<<")
-    print("="*50)
+    print("=" * 50)
 
+    out_dir   = MINI_RESULTS_DIR if MINI else RESULTS_DIR
     evaluator = Evaluator(use_local_model=False)
     scores    = {}
 
@@ -256,12 +374,15 @@ def run_ragas(baseline_results, graphnomd_results, graphmd_results):
         ("Graph no markdown",   graphnomd_results, "graphnomd_metrics.csv"),
         ("Graph with markdown", graphmd_results,   "graphmd_metrics.csv"),
     ]:
-        csv_path = os.path.join(RESULTS_DIR, out_csv)
+        csv_path = os.path.join(out_dir, out_csv)
         print(f"\n--- {label} ---")
         if os.path.exists(csv_path):
             print(f"  CSV exists, skipping. ({csv_path})")
-            df = pd.read_csv(csv_path)
-            scores[label] = df[["faithfulness", "answer_relevancy", "context_precision", "context_recall"]].mean().to_dict()
+            try:
+                df = pd.read_csv(csv_path)
+                scores[label] = df[["faithfulness", "answer_relevancy", "context_precision", "context_recall"]].mean().to_dict()
+            except Exception:
+                pass
             continue
         if not results:
             print(f"  No results to evaluate, skipping.")
@@ -280,7 +401,7 @@ def run_ragas(baseline_results, graphnomd_results, graphmd_results):
 def print_comparison(scores: dict):
     metrics = ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
     print("\n" + "=" * 72)
-    print(f"  NARRATIVEQA RESULTS ({SAMPLE_SIZE} samples)")
+    print(f"  NARRATIVEQA RESULTS ({'MINI — ' + str(SAMPLE_SIZE) + ' samples' if MINI else str(SAMPLE_SIZE) + ' samples'})")
     print("=" * 72)
     print(f"{'Pipeline':<30}" + "".join(f"{m[:10]:>12}" for m in metrics))
     print("-" * 72)
@@ -300,14 +421,29 @@ def print_comparison(scores: dict):
 # ------------------------------------------------------------------ #
 
 def main():
-    qa_list = load_and_prepare()
+    if MINI:
+        print(f"\n[MINI MODE] Checking embeddings exist (seed={SEED}, n={SAMPLE_SIZE})...")
+        for name, path, col in [
+            ("Baseline",            BASE_EMBED_DIR,      "baseline_rag"),
+            ("Graph no markdown",   GRAPHNOMD_EMBED_DIR, "qasper_graph_rag"),
+            ("Graph with markdown", EMBED_DIR,           "qasper_graph_rag"),
+        ]:
+            cnt = _count(path, col)
+            if cnt == 0:
+                print(f"[ERROR] {name} DB missing at {path}. Run full benchmark first.")
+                sys.exit(1)
+            print(f"  {name}: {cnt} chunks OK")
+
+    samples = load_narrativeqa()
+    qa_list = prepare_files(samples)
 
     ollama = OllamaManager()
 
-    build_graphs(ollama)
-    ingest_baseline(ollama)
-    ingest_graphnomd(ollama)
-    ingest_graphmd(ollama)
+    if not MINI:
+        build_graphs(ollama)
+        ingest_baseline(ollama)
+        ingest_graphnomd(ollama)
+        ingest_graphmd(ollama)
 
     baseline_results, graphnomd_results, graphmd_results = run_generation(ollama, qa_list)
 
@@ -315,9 +451,9 @@ def main():
     if scores:
         print_comparison(scores)
 
-    print("\n" + "="*50)
+    print("\n" + "=" * 50)
     print("  NARRATIVEQA BENCHMARK COMPLETE")
-    print("="*50)
+    print("=" * 50)
 
 
 if __name__ == "__main__":
