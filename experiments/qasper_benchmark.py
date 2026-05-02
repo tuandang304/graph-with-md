@@ -203,6 +203,7 @@ def main():
     prepare_files()
 
     qa_list = extract_qa(json_path)
+    
     print(f"\n[Data] {len(qa_list)} QA pairs extracted.")
 
     ollama = OllamaManager()

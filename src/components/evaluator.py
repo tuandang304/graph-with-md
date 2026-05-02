@@ -57,6 +57,12 @@ class Evaluator:
 
         dataset = Dataset.from_dict(formatted_data)
 
+        # Apply nest_asyncio to fix asyncio event loop conflicts
+        import nest_asyncio
+        nest_asyncio.apply()
+        
+        from ragas import evaluate
+
         # Call RAGAS engine
         evaluation_result = evaluate(
             dataset=dataset,
