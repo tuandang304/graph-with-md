@@ -24,7 +24,8 @@
       "PowerShell(Get-Process *)",
       "Bash(nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader)",
       "Bash(nvidia-smi)",
-      "Bash(curl -s http://127.0.0.1:11434/api/tags)"
+      "Bash(curl -s http://127.0.0.1:11434/api/tags)",
+      "Bash(Measure-Object -Line)"
     ]
   }
 }
