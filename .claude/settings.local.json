@@ -16,7 +16,15 @@
       "WebSearch",
       "Bash(Get-ChildItem -Path \"N:\\\\Experience Success\\\\CONFERENCE - APWeb - WAIM 2026 - DA NANG\\\\RAG\\\\repo\" -Recurse -File)",
       "Bash(Select-Object FullName)",
-      "Bash(Sort-Object FullName)"
+      "Bash(Sort-Object FullName)",
+      "Bash(Get-Content \"C:\\\\Users\\\\PC\\\\AppData\\\\Local\\\\Temp\\\\claude\\\\N--Experience-Success-CONFERENCE---APWeb---WAIM-2026---DA-NANG-RAG-repo\\\\d09f6387-986c-4cfd-b475-ba1a9c6411a7\\\\tasks\\\\bpcz6iijc.output\")",
+      "Bash(Select-Object -Last 60)",
+      "Bash(Get-Content *)",
+      "Bash(Select-Object -First 10)",
+      "PowerShell(Get-Process *)",
+      "Bash(nvidia-smi --query-compute-apps=pid,process_name,used_memory --format=csv,noheader)",
+      "Bash(nvidia-smi)",
+      "Bash(curl -s http://127.0.0.1:11434/api/tags)"
     ]
   }
 }
