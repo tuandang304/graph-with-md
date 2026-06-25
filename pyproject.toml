@@ -3,5 +3,18 @@ name = "repo"
 version = "0.1.0"
 description = "Add your description here"
 readme = "README.md"
-requires-python = ">=3.14"
-dependencies = []
+requires-python = ">=3.12"
+dependencies = [
+    "chromadb>=1.5.8",
+    "datasets>=4.8.5",
+    "langchain-openai>=1.2.1",
+    "langchain-text-splitters>=1.1.2",
+    "networkx>=3.6.1",
+    "openai>=2.33.0",
+    "pandas>=3.0.2",
+    "pillow>=12.2.0",
+    "python-dotenv>=1.2.2",
+    "ragas>=0.3.1",
+    "requests>=2.33.1",
+    "tqdm>=4.67.3",
+]
