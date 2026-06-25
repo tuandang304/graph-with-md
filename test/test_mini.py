@@ -3,6 +3,8 @@ Mini smoke test — verifies all three pipeline generators work correctly
 on the pre-built _smoketest ChromaDB collections (no Ollama/RAGAS required
 for the retrieval logic check; queries Ollama for generation).
 
+Also tests the NetworkX KnowledgeGraph component independently.
+
 Run: uv run python test_mini.py
 """
 import os
@@ -31,6 +33,98 @@ def check_collection(db_dir: str, col_name: str) -> tuple[bool, int]:
         return True, col.count()
     except Exception:
         return False, 0
+
+
+def test_knowledge_graph():
+    """Test KnowledgeGraph build, traverse, subgraph, shortest path."""
+    print("\n--- [0] KnowledgeGraph (NetworkX) ---")
+    try:
+        from src.components.knowledge_graph import KnowledgeGraph
+        import tempfile
+
+        # Create a temporary graph dir for testing
+        test_dir = os.path.join(_REPO_ROOT, "data", "_smoketest", "test_kg")
+        os.makedirs(test_dir, exist_ok=True)
+
+        kg = KnowledgeGraph(test_dir)
+
+        # Add test triplets
+        triplets = [
+            {"source": "BERT", "target": "Pre-trained Language Model", "relation": "is_a"},
+            {"source": "BERT", "target": "Text Classification", "relation": "used_for"},
+            {"source": "BERT", "target": "BookCorpus", "relation": "trained_on"},
+            {"source": "Text Classification", "target": "SST-2", "relation": "evaluated_on"},
+            {"source": "GPT", "target": "Pre-trained Language Model", "relation": "is_a"},
+            {"source": "GPT", "target": "Text Generation", "relation": "used_for"},
+            {"source": "Text Generation", "target": "WikiText", "relation": "evaluated_on"},
+        ]
+        kg.add_triplets("test_paper_001", triplets)
+
+        stats = kg.stats()
+        print(f"  Graph stats: {stats}")
+        assert stats["nodes"] == 7, f"Expected 7 nodes, got {stats['nodes']}"
+        assert stats["edges"] == 7, f"Expected 7 edges, got {stats['edges']}"
+
+        # Test multi-hop neighbors
+        ego = kg.get_neighbors("bert", hops=2)
+        print(f"  BERT 2-hop ego graph: {ego.number_of_nodes()} nodes, {ego.number_of_edges()} edges")
+        assert ego.number_of_nodes() >= 4, "BERT should have at least 4 nodes in 2-hop"
+
+        # Test subgraph for multiple entities
+        sub = kg.get_subgraph_for_entities(["bert", "gpt"], hops=1)
+        print(f"  BERT+GPT 1-hop subgraph: {sub.number_of_nodes()} nodes")
+        assert sub.number_of_nodes() >= 5, "Joint subgraph should have at least 5 nodes"
+
+        # Test shortest path
+        path = kg.shortest_path("BERT", "SST-2")
+        print(f"  Shortest path BERT → SST-2: {path}")
+        assert len(path) == 3, f"Expected path of length 3, got {len(path)}"
+
+        # Test entity matching
+        matched = kg.find_matching_entities(["bert model", "classification"])
+        print(f"  Matched entities for 'bert model', 'classification': {matched}")
+        assert len(matched) > 0, "Should match at least one entity"
+
+        # Test query entity extraction
+        query_entities = kg.extract_query_entities("What is BERT used for in text classification?")
+        print(f"  Query entity extraction: {query_entities}")
+        assert len(query_entities) > 0, "Should extract at least one entity"
+
+        # Test subgraph to text
+        text = kg.subgraph_to_text(ego)
+        print(f"  Subgraph text preview: {text[:200]}...")
+        assert len(text) > 0, "Text serialization should not be empty"
+
+        # Test save and load
+        kg.save("test_paper_001")
+        graphml_path = os.path.join(test_dir, "test_paper_001_graph.graphml")
+        assert os.path.exists(graphml_path), "GraphML file should be created"
+
+        kg2 = KnowledgeGraph(test_dir)
+        kg2.load("test_paper_001")
+        stats2 = kg2.stats()
+        print(f"  Reloaded graph stats: {stats2}")
+        assert stats2["nodes"] == stats["nodes"], "Reloaded graph should have same node count"
+
+        # Test entity context
+        context = kg.get_entity_context("bert", hops=2)
+        print(f"  Entity context for BERT: {context[:200]}...")
+        assert "BERT" in context or "bert" in context.lower(), "Context should mention BERT"
+
+        # Cleanup test file
+        if os.path.exists(graphml_path):
+            os.remove(graphml_path)
+        try:
+            os.rmdir(test_dir)
+        except OSError:
+            pass
+
+        print(f"  {PASS} KnowledgeGraph all operations OK")
+        return True
+    except Exception as e:
+        print(f"  {FAIL} {e}")
+        traceback.print_exc()
+        return False
 
 
 def test_retrieval_only():
@@ -62,15 +156,27 @@ def test_retrieval_only():
         paper_ids = list({m["paper_id"] for m in sem_metas if "paper_id" in m})
         print(f"  Channel 1: {len(sem_docs)} semantic chunks from papers {paper_ids}")
 
-        # Channel 2: graph edges scoped to retrieved papers
-        graph_r = col.query(
-            query_embeddings=[fake_emb],
-            n_results=5,
-            where={"$and": [{"type": {"$eq": "graph_edge"}}, {"paper_id": {"$in": paper_ids}}]},
-            include=["documents"]
-        )
-        graph_docs = graph_r["documents"][0]
-        print(f"  Channel 2: {len(graph_docs)} graph edges (scoped to same papers)")
+        # Channel 2: try graph_context first (new), fall back to graph_edge (legacy)
+        graph_type = "graph_context"
+        try:
+            graph_r = col.query(
+                query_embeddings=[fake_emb],
+                n_results=5,
+                where={"$and": [{"type": {"$eq": "graph_context"}}, {"paper_id": {"$in": paper_ids}}]},
+                include=["documents"]
+            )
+            graph_docs = graph_r["documents"][0]
+        except Exception:
+            graph_type = "graph_edge"
+            graph_r = col.query(
+                query_embeddings=[fake_emb],
+                n_results=5,
+                where={"$and": [{"type": {"$eq": "graph_edge"}}, {"paper_id": {"$in": paper_ids}}]},
+                include=["documents"]
+            )
+            graph_docs = graph_r["documents"][0]
+
+        print(f"  Channel 2: {len(graph_docs)} {graph_type} chunks (scoped to same papers)")
         print(f"  {PASS} Two-channel retrieval filters work correctly")
         return True
     except Exception as e:
@@ -120,13 +226,16 @@ def test_graphnomd_generator():
         from src.core.ollama_manager import OllamaManager
         from src.components.generator import Generator
         ollama = OllamaManager()
-        gen = Generator(ollama, db_dir, embed_model="bge-m3", llm_model="llama3.1:8b")
+        # Pass graph_dir for NetworkX traversal (may not have .graphml in smoketest, that's OK)
+        graph_dir = os.path.join(SMOKETEST_ROOT, "graph")
+        gen = Generator(ollama, db_dir, embed_model="bge-m3", llm_model="llama3.1:8b",
+                        graph_dir=graph_dir if os.path.isdir(graph_dir) else None)
         result = gen.query(TEST_QUESTION, top_k=10)
         ans = result["answer"]
         ctx = result["context"]
         print(f"  Contexts retrieved: {len(ctx)}")
         print(f"  Answer preview: {ans[:200]}")
-        # Graph no markdown has baseline_chunk (not semantic_section) + graph_edge
+        # Graph no markdown has baseline_chunk (not semantic_section) + graph_context/graph_edge
         # Channel 1 filter for semantic_section returns 0 → fallback activates
         assert len(ans) > 0, "Empty answer"
         print(f"  {PASS} Graph no markdown generator OK (fallback path for non-semantic chunks)")
@@ -150,7 +259,10 @@ def test_graphmd_generator():
         from src.core.ollama_manager import OllamaManager
         from src.components.generator import Generator
         ollama = OllamaManager()
-        gen = Generator(ollama, db_dir, embed_model="bge-m3", llm_model="llama3.1:8b")
+        # Pass graph_dir for NetworkX traversal
+        graph_dir = os.path.join(SMOKETEST_ROOT, "graph")
+        gen = Generator(ollama, db_dir, embed_model="bge-m3", llm_model="llama3.1:8b",
+                        graph_dir=graph_dir if os.path.isdir(graph_dir) else None)
         result = gen.query(TEST_QUESTION, top_k=10)
         ans = result["answer"]
         ctx = result["context"]
@@ -173,10 +285,11 @@ def main():
     print(f"  Test question: {TEST_QUESTION}")
 
     results = {
-        "Retrieval logic":        test_retrieval_only(),
-        "Baseline":               test_baseline_generator(),
-        "Graph no markdown":      test_graphnomd_generator(),
-        "Graph with markdown":    test_graphmd_generator(),
+        "KnowledgeGraph (NetworkX)": test_knowledge_graph(),
+        "Retrieval logic":           test_retrieval_only(),
+        "Baseline":                  test_baseline_generator(),
+        "Graph no markdown":         test_graphnomd_generator(),
+        "Graph with markdown":       test_graphmd_generator(),
     }
 
     print("\n" + "=" * 55)

@@ -182,8 +182,8 @@ def run_generation(ollama: OllamaManager, qa_list: list):
 
     baseline_gen  = BaselineGenerator(ollama, BASE_EMBED_DIR,     embed_model="bge-m3", llm_model="llama3.1:8b")
     mdonly_gen    = Generator(ollama, EMBED_DIR,                   embed_model="bge-m3", llm_model="llama3.1:8b", use_graph=False)
-    graphnomd_gen = Generator(ollama, GRAPHNOMD_EMBED_DIR,         embed_model="bge-m3", llm_model="llama3.1:8b")
-    graphmd_gen   = Generator(ollama, EMBED_DIR,                   embed_model="bge-m3", llm_model="llama3.1:8b")
+    graphnomd_gen = Generator(ollama, GRAPHNOMD_EMBED_DIR,         embed_model="bge-m3", llm_model="llama3.1:8b", graph_dir=GRAPH_DIR)
+    graphmd_gen   = Generator(ollama, EMBED_DIR,                   embed_model="bge-m3", llm_model="llama3.1:8b", graph_dir=GRAPH_DIR)
 
     baseline_results, mdonly_results, graphnomd_results, graphmd_results = [], [], [], []
 

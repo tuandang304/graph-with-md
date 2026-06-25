@@ -353,11 +353,13 @@ def run_generation(ollama: OllamaManager, qa_list: list):
         ollama, GRAPHNOMD_EMBED_DIR,
         embed_model="bge-m3", llm_model="llama3.1:8b",
         system_prompt=NQ_SYSTEM_PROMPT,
+        graph_dir=GRAPH_DIR,
     )
     graphmd_gen = Generator(
         ollama, EMBED_DIR,
         embed_model="bge-m3", llm_model="llama3.1:8b",
         system_prompt=NQ_SYSTEM_PROMPT,
+        graph_dir=GRAPH_DIR,
     )
 
     out_dir   = MINI_RESULTS_DIR if MINI else RESULTS_DIR

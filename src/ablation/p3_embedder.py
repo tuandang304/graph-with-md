@@ -7,12 +7,17 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.core.ollama_manager import OllamaManager
+from src.components.knowledge_graph import KnowledgeGraph
 
 class P3Embedder:
     """
     Graph no markdown: Fixed-size Chunking + Knowledge Graph.
     Keeps Qwen-extracted graph relations, but uses static chunking (1000 chars)
     on raw text instead of markdown section boundaries.
+
+    Graph embeddings use node-centric context from the NetworkX KnowledgeGraph:
+    each significant entity gets a multi-hop neighborhood description embedded
+    as a rich ``graph_context`` chunk (same approach as the main Embedder).
     """
     def __init__(self, ollama_manager: OllamaManager, txt_dir: str, graph_dir: str, db_dir: str, model_name: str = "bge-m3"):
         self.ollama = ollama_manager
@@ -37,6 +42,11 @@ class P3Embedder:
             length_function=len
         )
 
+        # Load the NetworkX Knowledge Graph
+        self.kg = KnowledgeGraph(self.graph_dir)
+        self.kg.load_all()
+        self.kg.load_all_from_json()
+
     def process_all(self):
         print(f"Starting Pipeline 3 vectorization with {self.model_name}...")
 
@@ -58,37 +68,40 @@ class P3Embedder:
                 all_metadata.append({"paper_id": paper_id, "type": "baseline_chunk"})
                 all_ids.append(f"{paper_id}_base_{idx}")
 
-        # 2. Read Graph Edges
-        graph_files = [f for f in os.listdir(self.graph_dir) if f.endswith('_graph.json')]
+        # 2. Graph: node-centric context from NetworkX Knowledge Graph
+        kg_stats = self.kg.stats()
+        print(f"Knowledge Graph loaded: {kg_stats['nodes']} nodes, {kg_stats['edges']} edges")
+
+        processed_papers = set()
+        graph_files = [f for f in os.listdir(self.graph_dir)
+                       if f.endswith('_graph.json') or f.endswith('_graph.graphml')]
         for file in graph_files:
-            paper_id = file.replace('_graph.json', '')
-            with open(os.path.join(self.graph_dir, file), 'r', encoding='utf-8') as f:
-                try:
-                    graph_data = json.load(f)
+            if file.endswith('_graph.json'):
+                paper_id = file.replace('_graph.json', '')
+            else:
+                paper_id = file.replace('_graph.graphml', '')
+            if paper_id in processed_papers:
+                continue
+            processed_papers.add(paper_id)
 
-                    if isinstance(graph_data, dict) and "raw_output" in graph_data:
-                        raw = graph_data["raw_output"]
-                        rescued_list = []
-                        for line in raw.split('\n'):
-                            if line.strip().startswith('{'):
-                                try:
-                                    rescued_list.append(json.loads(line.strip()))
-                                except json.JSONDecodeError:
-                                    pass
-                        graph_data = rescued_list
+            # Get all entities for this paper
+            entities = self.kg.get_entities_for_paper(paper_id)
+            if not entities:
+                continue
 
-                    if isinstance(graph_data, list):
-                        for idx, rel in enumerate(graph_data):
-                            src = rel.get("source", "")
-                            tgt = rel.get("target", "")
-                            r = rel.get("relation", "")
-                            if src and tgt and r:
-                                chunk = f"Graph Relation: {src} -> {r} -> {tgt}"
-                                all_chunks.append(chunk)
-                                all_metadata.append({"paper_id": paper_id, "type": "graph_edge"})
-                                all_ids.append(f"{paper_id}_edge_{idx}")
-                except Exception:
-                    pass
+            for idx, entity in enumerate(entities):
+                # Generate rich context for this entity (2-hop neighborhood)
+                context = self.kg.get_entity_context(entity, hops=2)
+                if not context or len(context) < 20:
+                    continue
+
+                all_chunks.append(context)
+                all_metadata.append({
+                    "paper_id": paper_id,
+                    "type": "graph_context",
+                    "entity": entity
+                })
+                all_ids.append(f"{paper_id}_entity_{idx}")
 
         # Filter already-embedded chunks to allow resume
         existing_data = self.collection.get(include=[])

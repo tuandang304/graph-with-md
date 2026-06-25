@@ -51,7 +51,8 @@ class RAGPipeline:
     def step_4_query(self, questions: list):
         print("\n=== STEP 4: GENERATION (LLAMA 3) ===")
         # Generator auto-manages keep_alive=0 for both bge-m3 and llama3.1
-        generator = Generator(self.ollama_manager, self.db_dir, embed_model="bge-m3", llm_model="llama3.1:8b")
+        generator = Generator(self.ollama_manager, self.db_dir, embed_model="bge-m3", llm_model="llama3.1:8b",
+                              graph_dir=self.graph_dir)
 
         results = []
         for index, q in enumerate(questions):

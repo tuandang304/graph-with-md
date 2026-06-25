@@ -4,15 +4,18 @@ import chromadb
 
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 from src.core.ollama_manager import OllamaManager
+from src.components.knowledge_graph import KnowledgeGraph
 
 class Generator:
     """
     RAG Generator for Graph with markdown and Graph no markdown pipelines.
     All model calls use keep_alive=0 to avoid two models loaded simultaneously (RTX 5060 Ti 16GB).
 
-    Two-channel retrieval (Graph with markdown):
-      Channel 1: semantic_section chunks (primary evidence)
-      Channel 2: graph_edge chunks scoped to papers from Channel 1 (relational facts)
+    Hybrid two-channel retrieval (Graph with markdown):
+      Channel 1: semantic_section chunks via vector search (primary evidence)
+      Channel 2: NetworkX graph traversal — extract query entities, perform multi-hop
+                 subgraph extraction, and convert to structured LLM context.
+                 Falls back to vector-retrieved graph_context chunks if no entities match.
     Scoping prevents off-topic graph edges from diluting context_precision.
 
     Fallback (Graph no markdown): collection has baseline_chunk not semantic_section,
@@ -30,7 +33,9 @@ class Generator:
         "Do not add information beyond what is given. Answer in English."
     )
 
-    def __init__(self, ollama_manager: OllamaManager, db_dir: str, embed_model: str = "bge-m3", llm_model: str = "llama3.1:8b", system_prompt: str = None, use_graph: bool = True):
+    def __init__(self, ollama_manager: OllamaManager, db_dir: str, embed_model: str = "bge-m3",
+                 llm_model: str = "llama3.1:8b", system_prompt: str = None,
+                 use_graph: bool = True, graph_dir: str = None):
         self.ollama = ollama_manager
         self.db_dir = db_dir
         self.embed_model = embed_model
@@ -43,6 +48,18 @@ class Generator:
             self.collection = self.chroma_client.get_collection(name="qasper_graph_rag")
         except Exception:
             self.collection = None
+
+        # Load NetworkX Knowledge Graph for structural traversal
+        self.kg = None
+        if self.use_graph and graph_dir:
+            self.kg = KnowledgeGraph(graph_dir)
+            self.kg.load_all()
+            self.kg.load_all_from_json()
+            stats = self.kg.stats()
+            if stats["nodes"] > 0:
+                print(f"[Generator] Knowledge Graph loaded: {stats['nodes']} nodes, {stats['edges']} edges")
+            else:
+                self.kg = None  # No graph data available
 
     def query(self, question: str, top_k: int = 10) -> dict:
         """Execute QA, return Dict with answer and context list."""
@@ -82,42 +99,117 @@ class Generator:
         if not sem_contexts:
             fallback = self.collection.query(query_embeddings=[query_emb], n_results=top_k)
             all_contexts = fallback.get("documents", [[]])[0]
-            return self._generate_answer(question, all_contexts, all_contexts, [])
+            # Still try graph traversal for P3 (baseline_chunk + graph)
+            graph_text = ""
+            if self.kg and self.use_graph:
+                graph_text = self._graph_traversal(question)
+            return self._generate_answer(question, all_contexts, all_contexts, [], graph_text)
 
-        # 2b. Channel 2 — graph edges scoped to papers already retrieved in Channel 1
-        # Scoping to retrieved_paper_ids prevents off-topic relational facts from polluting context.
-        # Skipped entirely in the Markdown-only ablation (use_graph=False).
-        graph_contexts = []
-        if self.use_graph and retrieved_paper_ids:
-            try:
-                graph_k = min(5, top_k // 2)
-                graph_results = self.collection.query(
-                    query_embeddings=[query_emb],
-                    n_results=graph_k,
-                    where={
-                        "$and": [
-                            {"type": {"$eq": "graph_edge"}},
-                            {"paper_id": {"$in": retrieved_paper_ids}}
-                        ]
-                    },
-                    include=["documents"]
-                )
-                graph_contexts = graph_results.get("documents", [[]])[0]
-            except Exception as e:
-                print(f"[Generation] Graph channel failed ({e}), skipping graph context.")
+        # 2b. Channel 2 — Knowledge Graph structural traversal (NEW)
+        # First try multi-hop subgraph extraction via NetworkX.
+        # Falls back to vector-retrieved graph_context chunks if no entities match.
+        graph_text = ""
+        vector_graph_contexts = []
 
-        all_contexts = sem_contexts + graph_contexts
-        return self._generate_answer(question, all_contexts, sem_contexts, graph_contexts)
+        if self.use_graph:
+            # Try structural traversal first
+            if self.kg:
+                graph_text = self._graph_traversal(question, paper_ids=retrieved_paper_ids)
 
-    def _generate_answer(self, question: str, all_contexts: list, sem_contexts: list, graph_contexts: list) -> dict:
+            # Also retrieve vector-embedded graph context as supplementary evidence
+            if retrieved_paper_ids:
+                try:
+                    graph_k = min(5, top_k // 2)
+                    graph_results = self.collection.query(
+                        query_embeddings=[query_emb],
+                        n_results=graph_k,
+                        where={
+                            "$and": [
+                                {"type": {"$eq": "graph_context"}},
+                                {"paper_id": {"$in": retrieved_paper_ids}}
+                            ]
+                        },
+                        include=["documents"]
+                    )
+                    vector_graph_contexts = graph_results.get("documents", [[]])[0]
+                except Exception as e:
+                    print(f"[Generation] Graph context vector search failed ({e}), trying legacy graph_edge...")
+                    # Backward compatibility: try old graph_edge type
+                    try:
+                        graph_results = self.collection.query(
+                            query_embeddings=[query_emb],
+                            n_results=min(5, top_k // 2),
+                            where={
+                                "$and": [
+                                    {"type": {"$eq": "graph_edge"}},
+                                    {"paper_id": {"$in": retrieved_paper_ids}}
+                                ]
+                            },
+                            include=["documents"]
+                        )
+                        vector_graph_contexts = graph_results.get("documents", [[]])[0]
+                    except Exception:
+                        pass
+
+        all_contexts = sem_contexts + vector_graph_contexts
+        return self._generate_answer(question, all_contexts, sem_contexts, vector_graph_contexts, graph_text)
+
+    def _graph_traversal(self, question: str, paper_ids: list = None) -> str:
+        """
+        Extract entities from the question, find matching graph nodes,
+        perform multi-hop subgraph extraction, and return structured text.
+        """
+        if not self.kg:
+            return ""
+
+        # Extract entities from the question
+        matched_entities = self.kg.extract_query_entities(question)
+
+        if not matched_entities:
+            return ""
+
+        # If paper_ids provided, prefer entities from those papers
+        if paper_ids:
+            paper_entities = set()
+            for pid in paper_ids:
+                paper_entities.update(self.kg.get_entities_for_paper(pid))
+            # Intersect matched entities with paper entities for scoping
+            scoped = [e for e in matched_entities if e in paper_entities]
+            if scoped:
+                matched_entities = scoped
+
+        # Limit to top 5 most relevant entities to avoid context bloat
+        matched_entities = matched_entities[:5]
+
+        # Extract 2-hop subgraph for matched entities
+        subgraph = self.kg.get_subgraph_for_entities(matched_entities, hops=2)
+        if subgraph.number_of_nodes() == 0:
+            return ""
+
+        graph_text = self.kg.subgraph_to_text(subgraph, max_relations=20)
+        print(f"[Generation] Graph traversal: {len(matched_entities)} entities matched, "
+              f"{subgraph.number_of_nodes()} nodes, {subgraph.number_of_edges()} edges in subgraph")
+        return graph_text
+
+    def _generate_answer(self, question: str, all_contexts: list, sem_contexts: list,
+                         graph_contexts: list, graph_traversal_text: str = "") -> dict:
         """Build structured prompt and call LLM."""
         # Truncate chunks to avoid overflowing Llama context window
         sem_str = "\n".join([f"  - {ctx[:800]}" for ctx in sem_contexts]) or "  (none)"
-        graph_str = "\n".join([f"  - {ctx}" for ctx in graph_contexts]) or "  (none)"
+
+        # Build graph section: prefer structural traversal, supplement with vector-retrieved
+        graph_section = ""
+        if graph_traversal_text:
+            graph_section += f"Knowledge Graph Context (structural traversal):\n{graph_traversal_text}\n\n"
+        if graph_contexts:
+            vector_graph_str = "\n".join([f"  - {ctx}" for ctx in graph_contexts])
+            graph_section += f"Additional relational facts (vector-retrieved):\n{vector_graph_str}\n\n"
+        if not graph_section:
+            graph_section = "Relational facts from knowledge graph:\n  (none)\n\n"
 
         prompt = (
             f"Text evidence from paper sections:\n{sem_str}\n\n"
-            f"Relational facts from knowledge graph:\n{graph_str}\n\n"
+            f"{graph_section}"
             f"Question: {question}\n\n"
             f"Using only the evidence above, provide a concise factual answer. "
             f"If the evidence does not contain the answer, say "
@@ -145,7 +237,8 @@ if __name__ == "__main__":
         manager,
         db_dir=os.path.join(_root, "data", "embeddings"),
         embed_model="bge-m3",
-        llm_model="llama3.1:8b"
+        llm_model="llama3.1:8b",
+        graph_dir=os.path.join(_root, "data", "graph")
     )
     # response = generator.query("What datasets did they experiment with?", top_k=3)
     # print(response["answer"])
