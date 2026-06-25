@@ -182,24 +182,28 @@ def run_generation(ollama: OllamaManager, qa_list: list):
     print("="*50)
 
     baseline_gen  = BaselineGenerator(ollama, BASE_EMBED_DIR,   embed_model="bge-m3", llm_model="llama3.1:8b")
+    mdonly_gen    = Generator(ollama, EMBED_DIR,                 embed_model="bge-m3", llm_model="llama3.1:8b", use_graph=False)
     graphnomd_gen = Generator(ollama, GRAPHNOMD_EMBED_DIR,       embed_model="bge-m3", llm_model="llama3.1:8b")
     graphmd_gen   = Generator(ollama, EMBED_DIR,                 embed_model="bge-m3", llm_model="llama3.1:8b")
 
     raw_paths = {
         "Baseline":            os.path.join(RESULTS_DIR, "baseline_raw.jsonl"),
+        "Markdown only":       os.path.join(RESULTS_DIR, "mdonly_raw.jsonl"),
         "Graph no markdown":   os.path.join(RESULTS_DIR, "graphnomd_raw.jsonl"),
         "Graph with markdown": os.path.join(RESULTS_DIR, "graphmd_raw.jsonl"),
     }
 
     baseline_results,  baseline_done  = _load_existing_raw(raw_paths["Baseline"])
+    mdonly_results,    mdonly_done    = _load_existing_raw(raw_paths["Markdown only"])
     graphnomd_results, graphnomd_done = _load_existing_raw(raw_paths["Graph no markdown"])
     graphmd_results,   graphmd_done   = _load_existing_raw(raw_paths["Graph with markdown"])
 
-    if baseline_done or graphnomd_done or graphmd_done:
-        print(f"Resuming: Baseline={len(baseline_done)}, GraphNoMD={len(graphnomd_done)}, GraphMD={len(graphmd_done)} already done.")
+    if baseline_done or mdonly_done or graphnomd_done or graphmd_done:
+        print(f"Resuming: Baseline={len(baseline_done)}, MDOnly={len(mdonly_done)}, GraphNoMD={len(graphnomd_done)}, GraphMD={len(graphmd_done)} already done.")
 
     # Append mode — write each answer immediately so crashes don't lose progress
     f_base = open(raw_paths["Baseline"],            'a', encoding='utf-8')
+    f_mdo  = open(raw_paths["Markdown only"],        'a', encoding='utf-8')
     f_nomd = open(raw_paths["Graph no markdown"],   'a', encoding='utf-8')
     f_md   = open(raw_paths["Graph with markdown"], 'a', encoding='utf-8')
 
@@ -208,6 +212,7 @@ def run_generation(ollama: OllamaManager, qa_list: list):
             print(f"\n[{i+1}/{len(qa_list)}] Q: {qa['question']}")
             for gen, store, done_ids, fh, top_k, label in [
                 (baseline_gen,  baseline_results,  baseline_done,  f_base, 5,  "Baseline"),
+                (mdonly_gen,    mdonly_results,    mdonly_done,    f_mdo,  10, "Markdown only"),
                 (graphnomd_gen, graphnomd_results, graphnomd_done, f_nomd, 10, "Graph no markdown"),
                 (graphmd_gen,   graphmd_results,   graphmd_done,   f_md,   10, "Graph with markdown"),
             ]:
@@ -231,18 +236,19 @@ def run_generation(ollama: OllamaManager, qa_list: list):
                     print(f"  {label} error: {e}")
     finally:
         f_base.close()
+        f_mdo.close()
         f_nomd.close()
         f_md.close()
 
-    print(f"\nGeneration complete — Baseline:{len(baseline_results)}, GraphNoMD:{len(graphnomd_results)}, GraphMD:{len(graphmd_results)}")
-    return baseline_results, graphnomd_results, graphmd_results
+    print(f"\nGeneration complete — Baseline:{len(baseline_results)}, MDOnly:{len(mdonly_results)}, GraphNoMD:{len(graphnomd_results)}, GraphMD:{len(graphmd_results)}")
+    return baseline_results, mdonly_results, graphnomd_results, graphmd_results
 
 
 # ------------------------------------------------------------------ #
 #  EVALUATION                                                          #
 # ------------------------------------------------------------------ #
 
-def run_ragas(baseline_results, graphnomd_results, graphmd_results):
+def run_ragas(baseline_results, mdonly_results, graphnomd_results, graphmd_results):
     print("\n" + "="*50)
     print(">>> RAGAS EVALUATION (GPT-4o-mini) <<<")
     print("="*50)
@@ -251,6 +257,7 @@ def run_ragas(baseline_results, graphnomd_results, graphmd_results):
 
     for label, results, out_csv in [
         ("Baseline",            baseline_results,  "baseline_metrics.csv"),
+        ("Markdown only",       mdonly_results,    "mdonly_metrics.csv"),
         ("Graph no markdown",   graphnomd_results, "graphnomd_metrics.csv"),
         ("Graph with markdown", graphmd_results,   "graphmd_metrics.csv"),
     ]:
@@ -286,9 +293,9 @@ def main():
     ingest_graphnomd(ollama)
     ingest_graphmd(ollama)
 
-    baseline_results, graphnomd_results, graphmd_results = run_generation(ollama, qa_list)
+    baseline_results, mdonly_results, graphnomd_results, graphmd_results = run_generation(ollama, qa_list)
 
-    run_ragas(baseline_results, graphnomd_results, graphmd_results)
+    run_ragas(baseline_results, mdonly_results, graphnomd_results, graphmd_results)
 
     print("\n" + "="*50)
     print("  HOTPOT BENCHMARK COMPLETE")

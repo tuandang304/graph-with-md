@@ -134,15 +134,17 @@ def run_generation(ollama: OllamaManager, qa_list: list):
     print("="*50)
 
     baseline_gen  = BaselineGenerator(ollama, BASE_EMBED_DIR,  embed_model="bge-m3", llm_model="llama3.1:8b")
+    mdonly_gen    = Generator(ollama, EMBED_DIR,                embed_model="bge-m3", llm_model="llama3.1:8b", use_graph=False)
     graphnomd_gen = Generator(ollama, GRAPHNOMD_DIR,            embed_model="bge-m3", llm_model="llama3.1:8b")
     graphmd_gen   = Generator(ollama, EMBED_DIR,                embed_model="bge-m3", llm_model="llama3.1:8b")
 
-    baseline_results, graphnomd_results, graphmd_results = [], [], []
+    baseline_results, mdonly_results, graphnomd_results, graphmd_results = [], [], [], []
 
     for i, qa in enumerate(qa_list):
         print(f"\n[{i+1}/{len(qa_list)}] {qa['question'][:80]}")
         for gen, store, top_k, label in [
             (baseline_gen,  baseline_results,  5,  "Baseline"),
+            (mdonly_gen,    mdonly_results,    10, "Markdown only"),
             (graphnomd_gen, graphnomd_results, 10, "Graph no markdown"),
             (graphmd_gen,   graphmd_results,   10, "Graph with markdown"),
         ]:
@@ -158,18 +160,19 @@ def run_generation(ollama: OllamaManager, qa_list: list):
                 print(f"  {label} error: {e}")
 
     pd.DataFrame(baseline_results).to_json( os.path.join(RESULTS_DIR, "baseline_raw.jsonl"),  orient="records", lines=True, force_ascii=False)
+    pd.DataFrame(mdonly_results).to_json(   os.path.join(RESULTS_DIR, "mdonly_raw.jsonl"),     orient="records", lines=True, force_ascii=False)
     pd.DataFrame(graphnomd_results).to_json(os.path.join(RESULTS_DIR, "graphnomd_raw.jsonl"),  orient="records", lines=True, force_ascii=False)
     pd.DataFrame(graphmd_results).to_json(  os.path.join(RESULTS_DIR, "graphmd_raw.jsonl"),    orient="records", lines=True, force_ascii=False)
-    print(f"\nRaw saved — Baseline:{len(baseline_results)}, GraphNoMD:{len(graphnomd_results)}, GraphMD:{len(graphmd_results)}")
+    print(f"\nRaw saved — Baseline:{len(baseline_results)}, MDOnly:{len(mdonly_results)}, GraphNoMD:{len(graphnomd_results)}, GraphMD:{len(graphmd_results)}")
 
-    return baseline_results, graphnomd_results, graphmd_results
+    return baseline_results, mdonly_results, graphnomd_results, graphmd_results
 
 
 # ------------------------------------------------------------------ #
 #  EVALUATION                                                          #
 # ------------------------------------------------------------------ #
 
-def run_ragas(baseline_results, graphnomd_results, graphmd_results):
+def run_ragas(baseline_results, mdonly_results, graphnomd_results, graphmd_results):
     print("\n" + "="*50)
     print(">>> RAGAS EVALUATION (GPT-4o-mini) <<<")
     print("="*50)
@@ -178,6 +181,7 @@ def run_ragas(baseline_results, graphnomd_results, graphmd_results):
 
     for label, results, out_csv in [
         ("Baseline",            baseline_results,  "baseline_metrics.csv"),
+        ("Markdown only",       mdonly_results,    "mdonly_metrics.csv"),
         ("Graph no markdown",   graphnomd_results, "graphnomd_metrics.csv"),
         ("Graph with markdown", graphmd_results,   "graphmd_metrics.csv"),
     ]:
@@ -212,9 +216,9 @@ def main():
     ingest_graphnomd(ollama)
     ingest_graphmd(ollama)
 
-    baseline_results, graphnomd_results, graphmd_results = run_generation(ollama, qa_list)
+    baseline_results, mdonly_results, graphnomd_results, graphmd_results = run_generation(ollama, qa_list)
 
-    run_ragas(baseline_results, graphnomd_results, graphmd_results)
+    run_ragas(baseline_results, mdonly_results, graphnomd_results, graphmd_results)
 
     print("\n" + "="*50)
     print("  QASPER BENCHMARK COMPLETE")

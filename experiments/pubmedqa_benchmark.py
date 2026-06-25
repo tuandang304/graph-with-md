@@ -158,16 +158,18 @@ def run_generation(ollama: OllamaManager, qa_list: list):
     print("="*50)
 
     baseline_gen  = BaselineGenerator(ollama, BASE_EMBED_DIR,     embed_model="bge-m3", llm_model="llama3.1:8b")
+    mdonly_gen    = Generator(ollama, EMBED_DIR,                   embed_model="bge-m3", llm_model="llama3.1:8b", use_graph=False)
     graphnomd_gen = Generator(ollama, GRAPHNOMD_EMBED_DIR,         embed_model="bge-m3", llm_model="llama3.1:8b")
     graphmd_gen   = Generator(ollama, EMBED_DIR,                   embed_model="bge-m3", llm_model="llama3.1:8b")
 
-    baseline_results, graphnomd_results, graphmd_results = [], [], []
+    baseline_results, mdonly_results, graphnomd_results, graphmd_results = [], [], [], []
 
     for i, qa in enumerate(qa_list):
         print(f"\n[{i+1}/{len(qa_list)}] {qa['question'][:80]}")
 
         for gen, store, top_k, label in [
             (baseline_gen,  baseline_results,  5,  "Baseline"),
+            (mdonly_gen,    mdonly_results,    10,  "Markdown only"),
             (graphnomd_gen, graphnomd_results, 10,  "Graph no markdown"),
             (graphmd_gen,   graphmd_results,   10,  "Graph with markdown"),
         ]:
@@ -184,11 +186,12 @@ def run_generation(ollama: OllamaManager, qa_list: list):
 
     out_dir = MINI_RESULTS_DIR if MINI else RESULTS_DIR
     pd.DataFrame(baseline_results).to_json( os.path.join(out_dir, "baseline_raw.jsonl"),  orient="records", lines=True, force_ascii=False)
+    pd.DataFrame(mdonly_results).to_json(   os.path.join(out_dir, "mdonly_raw.jsonl"),     orient="records", lines=True, force_ascii=False)
     pd.DataFrame(graphnomd_results).to_json(os.path.join(out_dir, "graphnomd_raw.jsonl"),  orient="records", lines=True, force_ascii=False)
     pd.DataFrame(graphmd_results).to_json(  os.path.join(out_dir, "graphmd_raw.jsonl"),    orient="records", lines=True, force_ascii=False)
-    print(f"\nRaw saved — Baseline:{len(baseline_results)}, GraphNoMD:{len(graphnomd_results)}, GraphMD:{len(graphmd_results)}")
+    print(f"\nRaw saved — Baseline:{len(baseline_results)}, MDOnly:{len(mdonly_results)}, GraphNoMD:{len(graphnomd_results)}, GraphMD:{len(graphmd_results)}")
 
-    return baseline_results, graphnomd_results, graphmd_results
+    return baseline_results, mdonly_results, graphnomd_results, graphmd_results
 
 
 # ------------------------------------------------------------------ #
@@ -207,9 +210,15 @@ def print_comparison(scores: dict):
     print("=" * 72)
     if "Graph with markdown" in scores and "Graph no markdown" in scores:
         gmd, gnomd = scores["Graph with markdown"], scores["Graph no markdown"]
-        print("\n  GraphMD vs GraphNoMD delta (positive = GraphMD better):")
+        print("\n  Markdown effect — GraphMD vs GraphNoMD delta (positive = GraphMD better):")
         for m in metrics:
             d = gmd.get(m, 0) - gnomd.get(m, 0)
+            print(f"    {m:<22} {'+' if d >= 0 else ''}{d:.4f}")
+    if "Graph with markdown" in scores and "Markdown only" in scores:
+        gmd, mdo = scores["Graph with markdown"], scores["Markdown only"]
+        print("\n  Graph effect — GraphMD vs MarkdownOnly delta (positive = graph helps):")
+        for m in metrics:
+            d = gmd.get(m, 0) - mdo.get(m, 0)
             print(f"    {m:<22} {'+' if d >= 0 else ''}{d:.4f}")
 
 
@@ -237,7 +246,7 @@ def main():
         ingest_graphnomd(ollama)
         ingest_graphmd(ollama)
 
-    baseline_results, graphnomd_results, graphmd_results = run_generation(ollama, qa_list)
+    baseline_results, mdonly_results, graphnomd_results, graphmd_results = run_generation(ollama, qa_list)
 
     scores = {}
     evaluator = Evaluator(use_local_model=False)
@@ -247,6 +256,7 @@ def main():
     out_dir = MINI_RESULTS_DIR if MINI else RESULTS_DIR
     for label, results, out_csv in [
         ("Baseline",            baseline_results,  "baseline_metrics.csv"),
+        ("Markdown only",       mdonly_results,    "mdonly_metrics.csv"),
         ("Graph no markdown",   graphnomd_results, "graphnomd_metrics.csv"),
         ("Graph with markdown", graphmd_results,   "graphmd_metrics.csv"),
     ]:

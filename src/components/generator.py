@@ -17,6 +17,12 @@ class Generator:
 
     Fallback (Graph no markdown): collection has baseline_chunk not semantic_section,
     so Channel 1 filter returns empty → falls back to unfiltered retrieval.
+
+    Markdown-only ablation (use_graph=False): reuses the Graph-with-markdown index but
+    disables Channel 2, so retrieval returns only semantic_section chunks (the full top_k
+    budget). This isolates the contribution of the knowledge graph: comparing this against
+    the full Graph-with-markdown pipeline measures the graph's effect with chunking held
+    fixed, completing the chunking x graph ablation grid (see docs/PAPER_REVISIONS.md, W1).
     """
     DEFAULT_SYSTEM_PROMPT = (
         "You are a precise academic research assistant. "
@@ -24,11 +30,12 @@ class Generator:
         "Do not add information beyond what is given. Answer in English."
     )
 
-    def __init__(self, ollama_manager: OllamaManager, db_dir: str, embed_model: str = "bge-m3", llm_model: str = "llama3.1:8b", system_prompt: str = None):
+    def __init__(self, ollama_manager: OllamaManager, db_dir: str, embed_model: str = "bge-m3", llm_model: str = "llama3.1:8b", system_prompt: str = None, use_graph: bool = True):
         self.ollama = ollama_manager
         self.db_dir = db_dir
         self.embed_model = embed_model
         self.llm_model = llm_model
+        self.use_graph = use_graph
         self._system_prompt = system_prompt if system_prompt is not None else self.DEFAULT_SYSTEM_PROMPT
 
         self.chroma_client = chromadb.PersistentClient(path=self.db_dir)
@@ -52,7 +59,9 @@ class Generator:
         )
 
         # 2a. Channel 1 — retrieve semantic section chunks (primary text evidence)
-        sem_k = max(top_k - 3, 5)
+        # Markdown-only (use_graph=False) spends the full budget on sections; the graph
+        # pipeline reserves ~3 slots for graph edges retrieved in Channel 2.
+        sem_k = top_k if not self.use_graph else max(top_k - 3, 5)
         sem_contexts = []
         retrieved_paper_ids = []
         try:
@@ -77,8 +86,9 @@ class Generator:
 
         # 2b. Channel 2 — graph edges scoped to papers already retrieved in Channel 1
         # Scoping to retrieved_paper_ids prevents off-topic relational facts from polluting context.
+        # Skipped entirely in the Markdown-only ablation (use_graph=False).
         graph_contexts = []
-        if retrieved_paper_ids:
+        if self.use_graph and retrieved_paper_ids:
             try:
                 graph_k = min(5, top_k // 2)
                 graph_results = self.collection.query(
