@@ -77,6 +77,15 @@ table. Reviewers cannot currently tell that the budgets differ.
 
 These are the core of the Reject. Two concrete, implementable improvements:
 
+**[CODE — DONE] NetworkX Knowledge Graph with structural traversal.** `src/components/graph_builder.py`
+now builds a real **NetworkX `DiGraph`** alongside the JSON output. The new
+`src/components/knowledge_graph.py` supports multi-hop traversal (`get_neighbors(entity, hops=2)`),
+subgraph extraction (`get_subgraph_for_entities()`), shortest path, and fuzzy entity matching.
+Graph files are persisted as `.graphml`. The Generator now performs **structural graph traversal**
+at query time (extract entities from question → match against graph → 2-hop subgraph → serialize
+as structured LLM context), replacing the old flat triplet-text embedding approach. This directly
+addresses the "naive pipeline" concern by introducing real graph-based reasoning.
+
 **[CODE — TODO] Sliding-window / full-document extraction.** `src/components/graph_builder.py`
 currently truncates each document to the first `chunk_char_limit = 8000` chars (one LLM call). Replace
 with a sliding window over the whole document (e.g. 8k-char windows, 1k overlap), de-duplicate
@@ -89,11 +98,12 @@ cheap grounding check: keep a triplet only if its surface forms (source/target) 
 the source window, optionally with a second-pass LLM "is this supported by the text? yes/no". Report
 the rejection rate as evidence of graph quality control.
 
-**[PAPER]** Reframe the contribution honestly (see item 6): the paper's claim is *not* "a better KG
-extractor" but "structure-aware chunking makes even a lightweight KG useful, via scoped retrieval."
-Add a short subsection describing extraction settings, the windowing strategy, the dedup/verification
-step, and a small manual audit of triplet precision on a sample (e.g. 50 triplets). This converts
-R2-6 from "naive pipeline" into "deliberately lightweight, with measured quality."
+**[PAPER]** Reframe the contribution: the paper now uses a real NetworkX graph with multi-hop
+traversal and subgraph extraction — not just embedded triplet strings. Describe the KnowledgeGraph
+architecture (entity normalization, `.graphml` persistence, 2-hop ego-graph retrieval, structured
+text serialization) in a subsection. The claim becomes "structure-aware chunking + structural graph
+traversal via lightweight KG enables effective multi-hop retrieval." Add a small manual audit of
+triplet precision on a sample (e.g. 50 triplets) to evidence graph quality.
 
 ---
 
@@ -173,11 +183,17 @@ and one hybrid baseline (BM25+dense). Position MD-GraphRAG against them in the m
 
 > R1-W3: the paper's "GraphRAG" embeds triplets as text, unlike global-graph GraphRAG methods.
 
-**[PAPER]** Rename the comparison to avoid implying parity with Microsoft-style GraphRAG. Suggested
-labels matching the code: **NaiveRAG** (Baseline), **Triplet-RAG (no structure)** (Graph no
-markdown), **MD-Triplet-RAG / MD-GraphRAG** (Graph with markdown), **MD-RAG** (Markdown only). Add one
-sentence distinguishing "lightweight triplet-as-text enrichment" from "community/graph-traversal
-GraphRAG," and cite the latter.
+**[CODE — DONE]** This concern is now substantially addressed: the codebase uses a real **NetworkX
+`DiGraph`** with multi-hop traversal, subgraph extraction, shortest path, and entity-aware retrieval.
+The Generator performs structural graph traversal at query time, not just vector search over embedded
+triplet strings. This moves the implementation much closer to "real GraphRAG" territory.
+
+**[PAPER]** Update the paper to describe the NetworkX-based architecture. Suggested labels matching
+the code: **NaiveRAG** (Baseline), **KG-RAG (no structure)** (Graph no markdown), **MD-KG-RAG /
+MD-GraphRAG** (Graph with markdown), **MD-RAG** (Markdown only). Highlight the structural graph
+traversal (multi-hop ego-graph, entity matching, subgraph extraction) as a distinguishing feature
+from flat triplet-text approaches, while still distinguishing from Microsoft-style community-based
+GraphRAG.
 
 ---
 

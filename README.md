@@ -13,9 +13,13 @@ QA datasets, scoring every run with [RAGAS](https://docs.ragas.io/).
 
 - **Baseline** — fixed-size chunking, dense retrieval, no graph.
 - **Markdown only** — semantic chunking on Markdown `##` boundaries, no graph.
-- **Graph no markdown** — fixed-size chunking + LLM-extracted knowledge-graph edges.
-- **Graph with markdown** — semantic chunking + graph edges + two-channel scoped retrieval (the
-  proposed method).
+- **Graph no markdown** — fixed-size chunking + **NetworkX Knowledge Graph** (multi-hop traversal, subgraph extraction).
+- **Graph with markdown** — semantic chunking + **NetworkX Knowledge Graph** + hybrid two-channel retrieval:
+  structural graph traversal + vector search (the proposed method).
+
+The knowledge graph is a **true NetworkX `DiGraph`** — not just embedded triplet strings. LLM-extracted
+triplets are stored as nodes and edges supporting multi-hop traversal, shortest path, subgraph
+extraction, and entity-aware retrieval at query time.
 
 The `Markdown only` cell isolates the contribution of the graph (it reuses the Graph-with-markdown
 index with the graph retrieval channel disabled), so the four cells together decompose the overall
@@ -65,11 +69,15 @@ benchmark.
 
 ## 2. Quick smoke test (no GPU-heavy ingestion)
 
-Verifies all generators work against the pre-built mini ChromaDB in `data/_smoketest/`:
+Verifies the KnowledgeGraph component and all generators work against the pre-built mini data in
+`data/_smoketest/`:
 
 ```bash
 uv run python test/test_mini.py
 ```
+
+The smoke test includes a standalone KnowledgeGraph unit test (build, traverse, subgraph, shortest
+path, entity matching, save/load) that runs without Ollama.
 
 ---
 
@@ -103,11 +111,14 @@ data/raw/qasper-dev-v0.3.json
 A full run executes four stages automatically, skipping any that are already complete:
 
 1. **Prepare files** — dataset → `.md` (semantic) and `.txt` (flat) per document.
-2. **Ingest** — build the knowledge graph (Qwen 2.5 7B), then embed (BGE-M3) into three ChromaDB
+2. **Build Knowledge Graph** — LLM extraction (Qwen 2.5 7B) → triplet JSON + **NetworkX `.graphml`**
+   files. The graph supports multi-hop traversal, subgraph extraction, and shortest path.
+3. **Ingest** — embed text chunks + **node-centric graph context** (BGE-M3) into three ChromaDB
    indexes: `baseline`, `graphnomd`, `graphmd`.
-3. **Generate** — answer every question with all four pipelines (Llama 3.1 8B), checkpointing raw
-   output to JSONL.
-4. **Evaluate** — score each pipeline with RAGAS and write per-pipeline CSVs.
+4. **Generate** — answer every question with all four pipelines (Llama 3.1 8B) using **hybrid
+   retrieval**: vector search (Channel 1) + structural graph traversal (Channel 2). Checkpointing
+   raw output to JSONL.
+5. **Evaluate** — score each pipeline with RAGAS and write per-pipeline CSVs.
 
 ```bash
 uv run python experiments/qasper_benchmark.py
@@ -176,14 +187,20 @@ df.to_csv("data/qasper/results/graphmd_metrics.csv", index=False)
 
 ```
 experiments/   # one full benchmark script per dataset (all 4 pipelines)
-test/          # test_mini.py smoke test
+test/          # test_mini.py smoke test (includes KnowledgeGraph unit tests)
 src/
   core/ollama_manager.py     # single HTTP client for all Ollama calls (VRAM-aware)
   components/                # graph-with-markdown pipeline
-    loader.py, graph_builder.py, embedder.py, generator.py, evaluator.py
+    knowledge_graph.py       # NetworkX KnowledgeGraph (multi-hop, subgraph, shortest path)
+    loader.py                # QASPER JSON → .md files
+    graph_builder.py         # LLM → triplet JSON + NetworkX .graphml
+    embedder.py              # semantic sections + node-centric graph context → ChromaDB
+    generator.py             # hybrid retrieval (vector + graph traversal) + LLM generation
+    evaluator.py             # RAGAS scoring via GPT-4o-mini
   baseline/                  # baseline pipeline (loader, embedder, generator)
-  ablation/p3_embedder.py    # graph-no-markdown embedder
+  ablation/p3_embedder.py    # graph-no-markdown embedder (fixed chunks + KG context)
 data/          # all outputs (gitignored); QASPER source goes in data/raw/
+  <dataset>/graph/           # _graph.json + _graph.graphml (NetworkX) per document
 docs/
   REVIEW.md            # reviewer feedback
   PAPER_REVISIONS.md   # action plan responding to the reviews
