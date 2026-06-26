@@ -54,6 +54,6 @@ class BaselinePipeline:
 
         print("\n[Benchmarking with RAGAS (GPT-4)...]")
         from src.components.evaluator import Evaluator
-        eval_ragas = Evaluator(use_local_model=False)
+        eval_ragas = Evaluator(use_local_model=True)
         df_ragas = eval_ragas.evaluate_dataframe(results)
         return df_ragas

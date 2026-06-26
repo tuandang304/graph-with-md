@@ -33,9 +33,8 @@ gain into a *chunking* effect, a *graph* effect, and their *interaction*. See
 | Requirement | Notes |
 |---|---|
 | **[uv](https://docs.astral.sh/uv/)** | Manages the virtualenv (`.venv/`) and Python 3.12. All commands below run through `uv run`. |
-| **[Ollama](https://ollama.com/)** | Local model server at `http://127.0.0.1:11434`. Used for graph extraction, embeddings, and generation. |
+| **[Ollama](https://ollama.com/)** | Local model server at `http://127.0.0.1:11434`. Used for graph extraction, embeddings, generation, and local RAGAS evaluation. |
 | **GPU** | Developed on an RTX 5060 Ti (16 GB). Models are loaded one at a time (`keep_alive=0`) so they never co-reside in VRAM. |
-| **OpenAI API key** | RAGAS uses `gpt-4o-mini` as judge and `text-embedding-3-small` for scoring. |
 | **Internet** | Most datasets auto-download (HuggingFace / HTTP) on first run. QASPER is the exception (see §3). |
 
 ### 1.1 Install Python dependencies
@@ -46,15 +45,7 @@ uv sync
 
 This creates `.venv/` and installs everything in `pyproject.toml`.
 
-### 1.2 Configure the OpenAI key
-
-Create a `.env` file in the repo root (it is gitignored):
-
-```
-OPENAI_API_KEY=sk-...
-```
-
-### 1.3 Pull the Ollama models
+### 1.2 Pull the Ollama models
 
 ```bash
 ollama pull qwen2.5:7b-instruct-q4_K_M   # knowledge-graph extraction & answer generation
@@ -176,7 +167,7 @@ import pandas as pd
 from src.components.evaluator import Evaluator
 
 records = pd.read_json("data/qasper/results/graphmd_raw.jsonl", lines=True).to_dict("records")
-df = Evaluator(use_local_model=False).evaluate_dataframe(records)
+df = Evaluator(use_local_model=True).evaluate_dataframe(records)
 df.to_csv("data/qasper/results/graphmd_metrics.csv", index=False)
 ```
 
@@ -194,8 +185,8 @@ src/
     loader.py                # QASPER JSON → .md files
     graph_builder.py         # LLM → triplet JSON + NetworkX .graphml
     embedder.py              # semantic sections + node-centric graph context → ChromaDB
-    generator.py             # hybrid retrieval (vector + graph traversal) + LLM generation
-    evaluator.py             # RAGAS scoring via GPT-4o-mini
+    generator.py             # hybrid retrieval (vector + graph traversal) + Qwen 2.5 7B generation
+    evaluator.py             # RAGAS scoring via local Qwen 2.5 7B
   baseline/                  # baseline pipeline (loader, embedder, generator)
   ablation/graph_no_markdown_embedder.py # graph-no-markdown embedder (fixed chunks + KG context)
 data/          # all outputs (gitignored); QASPER source goes in data/raw/
@@ -213,7 +204,6 @@ See [`CLAUDE.md`](CLAUDE.md) for a deeper architecture description.
 
 | Symptom | Fix |
 |---|---|
-| `OPENAI_API_KEY not found` during RAGAS | Create `.env` with the key (§1.2); inference still runs and raw JSONL is saved, only scoring fails. |
 | Connection refused to `127.0.0.1:11434` | Start Ollama (`ollama serve`) and confirm the required models are pulled. |
 | Ollama 500 on embeddings | Usually an over-long/malformed chunk; the embedder truncates to 15k chars and skips bad chunks automatically. |
 | `[ERROR] ... DB missing` in mini mode | Run the dataset's full benchmark once before using `mini`. |

@@ -216,10 +216,9 @@ GraphRAG.
 ## 9. Evaluation rigor (answers R3-8, R3-9, R3-10)
 
 - **[PAPER] Human evaluation (R3-8):** add a small human study (e.g. 50–100 answers rated for
-  correctness/grounding) to complement RAGAS. Note RAGAS itself uses GPT-4o-mini as judge — disclose
-  this and the embedding model (`text-embedding-3-small`) as a limitation.
+  correctness/grounding) to complement RAGAS. Note RAGAS has been transitioned to use a local LLM judge (`qwen2.5:7b-instruct-q4_K_M`) and embedding model (`bge-m3`) to run fully locally.
 - **[CODE/PAPER] Larger LLM (R3-9):** the pipeline is model-agnostic (`llm_model` arg). Re-run one
-  dataset with a stronger generator/judge to show the gains are not an artifact of Llama-3.1-8B.
+  dataset with a stronger generator/judge to show the gains are not an artifact of the default Qwen model.
 - **[PAPER] Scalability (R3-10):** report index size, ingestion time, and query latency per pipeline,
   and discuss behavior on larger corpora. Cheap to collect from existing runs.
 

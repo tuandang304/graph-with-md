@@ -41,12 +41,12 @@ src/                  # Pipeline source code
     loader.py             — QASPER JSON → .md files
     graph_builder.py      — Qwen 2.5 7B → _graph.json + _graph.graphml (NetworkX)
     embedder.py           — markdown sections + node-centric graph context → ChromaDB
-    generator.py          — hybrid retrieval (vector + graph traversal) + Llama generation
-    evaluator.py          — RAGAS scoring via GPT-4o-mini
+    generator.py          — hybrid retrieval (vector + graph traversal) + Qwen 2.5 7B Instruct generation
+    evaluator.py          — RAGAS scoring via local Qwen 2.5 7B Instruct
   baseline/               # Baseline pipeline
     loader.py             — QASPER JSON → flat .txt files
     embedder.py           — fixed-size chunks → ChromaDB
-    generator.py          — flat retrieval + Llama generation
+    generator.py          — flat retrieval + Qwen 2.5 7B Instruct generation
   ablation/               # Graph no markdown pipeline
     graph_no_markdown_embedder.py — fixed-size chunks + node-centric graph context → ChromaDB
   pipeline.py             — legacy single-dataset Graph-with-markdown orchestrator (not used by experiments/)
@@ -77,11 +77,8 @@ Note: root-level `compare_results.py`, `pubmedqa_stats.py`, and `sciq_stats.py` 
 # Install dependencies (uv manages virtualenv at .venv/, Python 3.12+)
 uv sync
 
-# Required: .env file at <repo>/.env with:
-# OPENAI_API_KEY=sk-...
-
 # Required: Ollama running locally at http://127.0.0.1:11434 with models pulled:
-# ollama pull qwen2.5:7b-instruct-q4_K_M   # graph extraction & answer generation
+# ollama pull qwen2.5:7b-instruct-q4_K_M   # graph extraction, answer generation, RAGAS judge
 # ollama pull bge-m3                       # embeddings
 ```
 
@@ -113,13 +110,13 @@ uv run python experiments/natural_questions_benchmark.py mini
 ### Data Flow (Graph with markdown)
 ```
 QASPER JSON → QasperLoader → .md files
-                           → GraphBuilder (Qwen 7B) → _graph.json + _graph.graphml (NetworkX)
+                           → GraphBuilder (Qwen 2.5 7B Instruct) → _graph.json + _graph.graphml (NetworkX)
                            → Embedder (BGE-M3) → ChromaDB (semantic_section + graph_context)
-                           → Generator (BGE-M3 + Llama 3.1:8B)
+                           → Generator (BGE-M3 + Qwen 2.5 7B Instruct)
                                Channel 1: vector search (semantic sections)
                                Channel 2: NetworkX graph traversal (multi-hop subgraph)
                                Channel 2b: vector fallback (graph_context chunks)
-                           → Evaluator (RAGAS + GPT-4o-mini) → metrics CSV
+                           → Evaluator (RAGAS + local Qwen 2.5 7B Instruct) → metrics CSV
 ```
 
 ### Key Modules
@@ -136,10 +133,9 @@ QASPER JSON → QasperLoader → .md files
 
 **`src/components/generator.py`** — Hybrid two-channel retrieval for Graph with markdown: Channel 1 = vector search for `semantic_section` chunks (`sem_k = max(top_k-3, 5)`). Channel 2 = **NetworkX structural traversal**: extracts query entities, matches them against graph nodes, performs 2-hop subgraph extraction, converts to structured text (e.g., `Entity "BERT": → (is_a) → Pre-trained LM`). Falls back to vector-retrieved `graph_context` chunks scoped to papers from Channel 1. New `graph_dir` parameter loads the KnowledgeGraph. Fallback to unfiltered retrieval when Channel 1 returns empty (Graph no markdown path). The `use_graph=False` flag powers the **Markdown only** ablation.
 
-**`src/components/evaluator.py`** — RAGAS via GPT-4o-mini judge + `text-embedding-3-small`. Always computes `faithfulness` and `answer_relevancy`; adds `context_precision` and `context_recall` only when `ground_truth` is present in the results. Generation top_k: Baseline=5, Graph pipelines=10.
+**`src/components/evaluator.py`** — RAGAS via local `qwen2.5:7b-instruct-q4_K_M` judge + `bge-m3` embeddings. Always computes `faithfulness` and `answer_relevancy`; adds `context_precision` and `context_recall` only when `ground_truth` is present in the results. Generation top_k: Baseline=5, Graph pipelines=10.
 
 ### Data Paths
-- `.env` → `<repo>/.env` (gitignored) — must contain `OPENAI_API_KEY`
 - QASPER source → `<repo>/data/raw/qasper-dev-v0.3.json` (only dataset shipped locally; others download via `datasets`/HTTP into their own `data/<dataset>/` dir)
 - All outputs → `<repo>/data/<dataset>/` (gitignored)
 - Graph files: `_graph.json` (backward-compatible triplet JSON) + `_graph.graphml` (NetworkX)

@@ -20,22 +20,24 @@ class Evaluator:
     Component 5: Quantify and measure RAG quality using the RAGAS Framework.
     Uses gpt-4o-mini as LLM Judge (future option: swap to Gemma-2-9B).
     """
-    def __init__(self, use_local_model: bool = False):
+    def __init__(self, use_local_model: bool = True):
         self.use_local_model = use_local_model
 
         if not self.use_local_model:
             api_key = os.environ.get("OPENAI_API_KEY")
             if not api_key:
                 print("NOTE: OPENAI_API_KEY not found. Evaluation will fail.")
+                self.eval_llm = None
+                self.eval_embeddings = None
             else:
                 self.eval_llm = ChatOpenAI(model="gpt-4o-mini", temperature=0)
                 self.eval_embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
         else:
-            # Future: replace with ChatOllama for local inference
-            # from langchain_community.chat_models import ChatOllama
-            print("Initializing Ragas Judge with Local LLM (Gemma).")
-            self.eval_llm = None
-            self.eval_embeddings = None
+            from langchain_community.chat_models import ChatOllama
+            from langchain_community.embeddings import OllamaEmbeddings
+            print("Initializing Ragas Judge with Local LLM (qwen2.5:7b-instruct-q4_K_M) & Embeddings (bge-m3).")
+            self.eval_llm = ChatOllama(model="qwen2.5:7b-instruct-q4_K_M", temperature=0)
+            self.eval_embeddings = OllamaEmbeddings(model="bge-m3")
 
     def evaluate_dataframe(self, results: list) -> pd.DataFrame:
         """

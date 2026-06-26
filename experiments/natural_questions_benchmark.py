@@ -426,11 +426,11 @@ def run_generation(ollama: OllamaManager, qa_list: list):
 
 def run_ragas(baseline_results, mdonly_results, graphnomd_results, graphmd_results):
     print("\n" + "=" * 50)
-    print(">>> RAGAS EVALUATION (GPT-4o-mini) <<<")
+    print(">>> RAGAS EVALUATION (Local Qwen) <<<")
     print("=" * 50)
 
     out_dir   = MINI_RESULTS_DIR if MINI else RESULTS_DIR
-    evaluator = Evaluator(use_local_model=False)
+    evaluator = Evaluator(use_local_model=True)
     scores    = {}
 
     for label, results, out_csv in [

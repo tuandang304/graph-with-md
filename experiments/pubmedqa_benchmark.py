@@ -249,9 +249,9 @@ def main():
     baseline_results, mdonly_results, graphnomd_results, graphmd_results = run_generation(ollama, qa_list)
 
     scores = {}
-    evaluator = Evaluator(use_local_model=False)
+    evaluator = Evaluator(use_local_model=True)
     print("\n" + "="*50)
-    print(">>> RAGAS EVALUATION (GPT-4o-mini) <<<")
+    print(">>> RAGAS EVALUATION (Local Qwen) <<<")
     print("="*50)
     out_dir = MINI_RESULTS_DIR if MINI else RESULTS_DIR
     for label, results, out_csv in [

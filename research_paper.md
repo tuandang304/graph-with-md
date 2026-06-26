@@ -238,7 +238,7 @@ Retrieval budget: Baseline *k* = 5; the markdown/graph pipelines *k* = 10, of wh
 
 ### 5.3 Metrics
 
-We use RAGAS with GPT-4o-mini as judge and `text-embedding-3-small` for similarity:
+We use RAGAS with `qwen2.5:7b-instruct-q4_K_M` as judge and `bge-m3` for similarity:
 
 - **Faithfulness** — is the answer grounded in the retrieved context? (generator)
 - **Answer relevancy** — does the answer address the question? (generator)
@@ -334,12 +334,12 @@ are multi-hop and recall is the bottleneck; it is not worthwhile — and can hur
 already short and precise. We position MD-GraphRAG as a recall-oriented, low-cost option rather than a
 dominant default.
 
-**Threats to validity.** (i) RAGAS uses an LLM judge (GPT-4o-mini); absolute values may shift under a
+**Threats to validity.** (i) RAGAS uses an LLM judge (`qwen2.5:7b-instruct-q4_K_M`); absolute values may shift under a
 different judge, so we emphasise within-dataset rankings and report all judge/embedding models. (ii)
 The retrieval budget differs between Baseline (*k* = 5) and the other pipelines (*k* = 10); ongoing
 runs equalise *k*. (iii) Triplets are extracted from a bounded prefix of each document; very
 late-document relations may be missed (addressed in Section 7). (iv) A single small generator
-(Llama-3.1-8B) is used; generality to larger models is untested.
+(`qwen2.5:7b-instruct-q4_K_M`) is used; generality to larger models is untested.
 
 ---
 

@@ -74,7 +74,7 @@ class RAGPipeline:
 
     def step_5_eval(self, results: list):
         print("\n=== STEP 5: EVALUATING WITH RAGAS ===")
-        evaluator = Evaluator(use_local_model=False)  # Uses OpenAI gpt-4o-mini
+        evaluator = Evaluator(use_local_model=True)  # Uses local Ollama model
         df = evaluator.evaluate_dataframe(results)
         return df
 
