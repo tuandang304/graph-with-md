@@ -81,9 +81,8 @@ uv sync
 # OPENAI_API_KEY=sk-...
 
 # Required: Ollama running locally at http://127.0.0.1:11434 with models pulled:
-# ollama pull qwen2.5:7b   # graph extraction
-# ollama pull bge-m3       # embeddings
-# ollama pull llama3.1:8b  # generation
+# ollama pull qwen2.5:7b-instruct-q4_K_M   # graph extraction & answer generation
+# ollama pull bge-m3                       # embeddings
 ```
 
 ## Running
@@ -129,7 +128,7 @@ QASPER JSON → QasperLoader → .md files
 
 **`src/components/knowledge_graph.py`** — NetworkX `DiGraph` wrapper. Provides: `add_triplets()` to build graph, `save()`/`load()` for `.graphml` persistence, `get_neighbors(entity, hops=2)` for multi-hop ego-graph, `get_subgraph_for_entities()` for union of ego-graphs, `shortest_path()`, `find_matching_entities()` for fuzzy entity matching, `extract_query_entities()` for n-gram-based entity extraction from questions, `get_entity_context()` for generating rich node-centric text, and `subgraph_to_text()` for LLM-readable structured output. Entity IDs are normalized (lowercase, stripped) for deduplication; original surface forms stored as node attributes.
 
-**`src/components/graph_builder.py`** — Qwen 2.5 7B → `_graph.json` + `_graph.graphml`. After LLM extracts triplets, they are saved as JSON (backward compatible) AND inserted into a `KnowledgeGraph` instance which is persisted as `.graphml`. All benchmarks use `model_name="qwen2.5:7b"`. NarrativeQA and Natural Questions pass a domain-specific extraction prompt.
+**`src/components/graph_builder.py`** — Qwen 2.5 7B Instruct (Q4_K_M) → `_graph.json` + `_graph.graphml`. After LLM extracts triplets, they are saved as JSON (backward compatible) AND inserted into a `KnowledgeGraph` instance which is persisted as `.graphml`. All benchmarks use `model_name="qwen2.5:7b-instruct-q4_K_M"`. NarrativeQA and Natural Questions pass a domain-specific extraction prompt.
 
 **`src/components/embedder.py`** — Chunks markdown by `##` section boundaries (merges chunks < 400 chars), then generates **node-centric graph context** for each entity in the KnowledgeGraph (2-hop neighborhood descriptions). Chunk metadata: `{"paper_id": str, "type": "semantic_section"|"graph_context", "entity": str}`. Uses `upsert` so re-runs are safe.
 

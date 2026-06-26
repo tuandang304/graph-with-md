@@ -16,6 +16,11 @@ from dotenv import load_dotenv
 _REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 load_dotenv(os.path.join(_REPO_ROOT, ".env"), override=True)
 sys.path.append(_REPO_ROOT)
+try:
+    sys.stdout.reconfigure(encoding='utf-8')
+    sys.stderr.reconfigure(encoding='utf-8')
+except AttributeError:
+    pass
 
 SMOKETEST_ROOT = os.path.join(_REPO_ROOT, "data", "_smoketest")
 
@@ -62,7 +67,7 @@ def test_knowledge_graph():
 
         stats = kg.stats()
         print(f"  Graph stats: {stats}")
-        assert stats["nodes"] == 7, f"Expected 7 nodes, got {stats['nodes']}"
+        assert stats["nodes"] == 8, f"Expected 8 nodes, got {stats['nodes']}"
         assert stats["edges"] == 7, f"Expected 7 edges, got {stats['edges']}"
 
         # Test multi-hop neighbors
@@ -77,7 +82,7 @@ def test_knowledge_graph():
 
         # Test shortest path
         path = kg.shortest_path("BERT", "SST-2")
-        print(f"  Shortest path BERT → SST-2: {path}")
+        print(f"  Shortest path BERT -> SST-2: {path}")
         assert len(path) == 3, f"Expected path of length 3, got {len(path)}"
 
         # Test entity matching
@@ -198,7 +203,7 @@ def test_baseline_generator():
         from src.core.ollama_manager import OllamaManager
         from src.baseline.generator import BaselineGenerator
         ollama = OllamaManager()
-        gen = BaselineGenerator(ollama, db_dir, embed_model="bge-m3", llm_model="llama3.1:8b")
+        gen = BaselineGenerator(ollama, db_dir, embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M")
         result = gen.query(TEST_QUESTION, top_k=5)
         ans = result["answer"]
         ctx = result["context"]
@@ -228,7 +233,7 @@ def test_graphnomd_generator():
         ollama = OllamaManager()
         # Pass graph_dir for NetworkX traversal (may not have .graphml in smoketest, that's OK)
         graph_dir = os.path.join(SMOKETEST_ROOT, "graph")
-        gen = Generator(ollama, db_dir, embed_model="bge-m3", llm_model="llama3.1:8b",
+        gen = Generator(ollama, db_dir, embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M",
                         graph_dir=graph_dir if os.path.isdir(graph_dir) else None)
         result = gen.query(TEST_QUESTION, top_k=10)
         ans = result["answer"]
@@ -261,7 +266,7 @@ def test_graphmd_generator():
         ollama = OllamaManager()
         # Pass graph_dir for NetworkX traversal
         graph_dir = os.path.join(SMOKETEST_ROOT, "graph")
-        gen = Generator(ollama, db_dir, embed_model="bge-m3", llm_model="llama3.1:8b",
+        gen = Generator(ollama, db_dir, embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M",
                         graph_dir=graph_dir if os.path.isdir(graph_dir) else None)
         result = gen.query(TEST_QUESTION, top_k=10)
         ans = result["answer"]

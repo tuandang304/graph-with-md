@@ -216,7 +216,7 @@ def build_graphs(ollama: OllamaManager):
     print(f"Building graphs: {len(done_files)}/{len(md_files)} done...")
     GraphBuilder(
         ollama, PARSED_DIR, GRAPH_DIR,
-        model_name="qwen2.5:7b",
+        model_name="qwen2.5:7b-instruct-q4_K_M",
         system_prompt=NARRATIVE_GRAPH_PROMPT,
     ).process_all()
 
@@ -288,24 +288,24 @@ def run_generation(ollama: OllamaManager, qa_list: list):
 
     baseline_gen = BaselineGenerator(
         ollama, BASE_EMBED_DIR,
-        embed_model="bge-m3", llm_model="llama3.1:8b",
+        embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M",
         system_prompt=NARRATIVE_BASELINE_PROMPT,
     )
     mdonly_gen = Generator(
         ollama, EMBED_DIR,
-        embed_model="bge-m3", llm_model="llama3.1:8b",
+        embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M",
         system_prompt=NARRATIVE_SYSTEM_PROMPT,
         use_graph=False,
     )
     graphnomd_gen = Generator(
         ollama, GRAPHNOMD_EMBED_DIR,
-        embed_model="bge-m3", llm_model="llama3.1:8b",
+        embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M",
         system_prompt=NARRATIVE_SYSTEM_PROMPT,
         graph_dir=GRAPH_DIR,
     )
     graphmd_gen = Generator(
         ollama, EMBED_DIR,
-        embed_model="bge-m3", llm_model="llama3.1:8b",
+        embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M",
         system_prompt=NARRATIVE_SYSTEM_PROMPT,
         graph_dir=GRAPH_DIR,
     )

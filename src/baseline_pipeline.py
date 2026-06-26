@@ -38,7 +38,7 @@ class BaselinePipeline:
 
     def run_qa_and_evaluate(self, test_data: list):
         print("\n=== BASELINE QA & EVALUATION ===")
-        generator = BaselineGenerator(self.ollama_manager, self.db_dir, embed_model="bge-m3", llm_model="llama3.1:8b")
+        generator = BaselineGenerator(self.ollama_manager, self.db_dir, embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M")
 
         results = []
         for index, q in enumerate(test_data):

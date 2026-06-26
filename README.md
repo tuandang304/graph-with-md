@@ -57,9 +57,8 @@ OPENAI_API_KEY=sk-...
 ### 1.3 Pull the Ollama models
 
 ```bash
-ollama pull qwen2.5:7b    # knowledge-graph extraction
-ollama pull bge-m3        # embeddings (ingestion + query)
-ollama pull llama3.1:8b   # answer generation
+ollama pull qwen2.5:7b-instruct-q4_K_M   # knowledge-graph extraction & answer generation
+ollama pull bge-m3                       # embeddings (ingestion + query)
 ```
 
 Make sure the Ollama server is running (`ollama serve`, or the desktop app) before launching a

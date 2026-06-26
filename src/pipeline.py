@@ -37,10 +37,10 @@ class RAGPipeline:
 
     def step_2_build_graph(self):
         print("\n=== STEP 2: GRAPH KNOWLEDGE EXTRACTION (QWEN 14B) ===")
-        self.ollama_manager.unload_model("qwen2.5:7b")  # Force clear before start
-        builder = GraphBuilder(self.ollama_manager, self.parsed_dir, self.graph_dir, model_name="qwen2.5:7b")
+        self.ollama_manager.unload_model("qwen2.5:7b-instruct-q4_K_M")  # Force clear before start
+        builder = GraphBuilder(self.ollama_manager, self.parsed_dir, self.graph_dir, model_name="qwen2.5:7b-instruct-q4_K_M")
         builder.process_all()
-        self.ollama_manager.unload_model("qwen2.5:7b")  # Clear after finish
+        self.ollama_manager.unload_model("qwen2.5:7b-instruct-q4_K_M")  # Clear after finish
 
     def step_3_embed_data(self):
         print("\n=== STEP 3: CREATING VECTOR EMBEDDINGS (BGE-M3) ===")
@@ -51,7 +51,7 @@ class RAGPipeline:
     def step_4_query(self, questions: list):
         print("\n=== STEP 4: GENERATION (LLAMA 3) ===")
         # Generator auto-manages keep_alive=0 for both bge-m3 and llama3.1
-        generator = Generator(self.ollama_manager, self.db_dir, embed_model="bge-m3", llm_model="llama3.1:8b",
+        generator = Generator(self.ollama_manager, self.db_dir, embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M",
                               graph_dir=self.graph_dir)
 
         results = []

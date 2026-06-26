@@ -34,7 +34,7 @@ class Generator:
     )
 
     def __init__(self, ollama_manager: OllamaManager, db_dir: str, embed_model: str = "bge-m3",
-                 llm_model: str = "llama3.1:8b", system_prompt: str = None,
+                 llm_model: str = "qwen2.5:7b-instruct-q4_K_M", system_prompt: str = None,
                  use_graph: bool = True, graph_dir: str = None):
         self.ollama = ollama_manager
         self.db_dir = db_dir
@@ -237,7 +237,7 @@ if __name__ == "__main__":
         manager,
         db_dir=os.path.join(_root, "data", "embeddings"),
         embed_model="bge-m3",
-        llm_model="llama3.1:8b",
+        llm_model="qwen2.5:7b-instruct-q4_K_M",
         graph_dir=os.path.join(_root, "data", "graph")
     )
     # response = generator.query("What datasets did they experiment with?", top_k=3)

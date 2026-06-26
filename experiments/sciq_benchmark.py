@@ -148,7 +148,7 @@ def ingest_graphmd(ollama: OllamaManager):
         return
 
     print("[1] GraphBuilder (Qwen 7B)...")
-    GraphBuilder(ollama, PARSED_DIR, GRAPH_DIR, model_name="qwen2.5:7b").process_all()
+    GraphBuilder(ollama, PARSED_DIR, GRAPH_DIR, model_name="qwen2.5:7b-instruct-q4_K_M").process_all()
 
     print("\n[2] Embedder (BGE-M3) — semantic sections + graph edges...")
     Embedder(ollama, PARSED_DIR, GRAPH_DIR, EMBED_DIR, model_name="bge-m3").process_all()
@@ -163,10 +163,10 @@ def run_generation(ollama: OllamaManager, qa_list: list):
     print(f">>> GENERATION — All 3 Pipelines ({len(qa_list)} questions) <<<")
     print("="*50)
 
-    baseline_gen  = BaselineGenerator(ollama, BASE_EMBED_DIR,     embed_model="bge-m3", llm_model="llama3.1:8b")
-    mdonly_gen    = Generator(ollama, EMBED_DIR,                   embed_model="bge-m3", llm_model="llama3.1:8b", use_graph=False)
-    graphnomd_gen = Generator(ollama, GRAPHNOMD_EMBED_DIR,         embed_model="bge-m3", llm_model="llama3.1:8b", graph_dir=GRAPH_DIR)
-    graphmd_gen   = Generator(ollama, EMBED_DIR,                   embed_model="bge-m3", llm_model="llama3.1:8b", graph_dir=GRAPH_DIR)
+    baseline_gen  = BaselineGenerator(ollama, BASE_EMBED_DIR,     embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M")
+    mdonly_gen    = Generator(ollama, EMBED_DIR,                   embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M", use_graph=False)
+    graphnomd_gen = Generator(ollama, GRAPHNOMD_EMBED_DIR,         embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M", graph_dir=GRAPH_DIR)
+    graphmd_gen   = Generator(ollama, EMBED_DIR,                   embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M", graph_dir=GRAPH_DIR)
 
     baseline_results, mdonly_results, graphnomd_results, graphmd_results = [], [], [], []
 

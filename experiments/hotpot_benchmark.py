@@ -141,7 +141,7 @@ def build_graphs(ollama: OllamaManager):
         print(f"Graphs complete ({len(done_files)} files). Skipping.")
         return
     print(f"Building graphs: {len(done_files)}/{len(md_files)} done...")
-    GraphBuilder(ollama, PARSED_DIR, GRAPH_DIR, model_name="qwen2.5:7b").process_all()
+    GraphBuilder(ollama, PARSED_DIR, GRAPH_DIR, model_name="qwen2.5:7b-instruct-q4_K_M").process_all()
 
 
 def ingest_graphmd(ollama: OllamaManager):
@@ -181,10 +181,10 @@ def run_generation(ollama: OllamaManager, qa_list: list):
     print(f">>> GENERATION — All 3 Pipelines ({len(qa_list)} questions) <<<")
     print("="*50)
 
-    baseline_gen  = BaselineGenerator(ollama, BASE_EMBED_DIR,   embed_model="bge-m3", llm_model="llama3.1:8b")
-    mdonly_gen    = Generator(ollama, EMBED_DIR,                 embed_model="bge-m3", llm_model="llama3.1:8b", use_graph=False)
-    graphnomd_gen = Generator(ollama, GRAPHNOMD_EMBED_DIR,       embed_model="bge-m3", llm_model="llama3.1:8b", graph_dir=GRAPH_DIR)
-    graphmd_gen   = Generator(ollama, EMBED_DIR,                 embed_model="bge-m3", llm_model="llama3.1:8b", graph_dir=GRAPH_DIR)
+    baseline_gen  = BaselineGenerator(ollama, BASE_EMBED_DIR,   embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M")
+    mdonly_gen    = Generator(ollama, EMBED_DIR,                 embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M", use_graph=False)
+    graphnomd_gen = Generator(ollama, GRAPHNOMD_EMBED_DIR,       embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M", graph_dir=GRAPH_DIR)
+    graphmd_gen   = Generator(ollama, EMBED_DIR,                 embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M", graph_dir=GRAPH_DIR)
 
     raw_paths = {
         "Baseline":            os.path.join(RESULTS_DIR, "baseline_raw.jsonl"),
