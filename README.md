@@ -110,11 +110,11 @@ data/raw/qasper-dev-v0.3.json
 A full run executes four stages automatically, skipping any that are already complete:
 
 1. **Prepare files** — dataset → `.md` (semantic) and `.txt` (flat) per document.
-2. **Build Knowledge Graph** — LLM extraction (Qwen 2.5 7B) → triplet JSON + **NetworkX `.graphml`**
+2. **Build Knowledge Graph** — LLM extraction (Qwen 2.5 7B Instruct Q4_K_M) → triplet JSON + **NetworkX `.graphml`**
    files. The graph supports multi-hop traversal, subgraph extraction, and shortest path.
 3. **Ingest** — embed text chunks + **node-centric graph context** (BGE-M3) into three ChromaDB
    indexes: `baseline`, `graphnomd`, `graphmd`.
-4. **Generate** — answer every question with all four pipelines (Llama 3.1 8B) using **hybrid
+4. **Generate** — answer every question with all four pipelines (Qwen 2.5 7B Instruct Q4_K_M) using **hybrid
    retrieval**: vector search (Channel 1) + structural graph traversal (Channel 2). Checkpointing
    raw output to JSONL.
 5. **Evaluate** — score each pipeline with RAGAS and write per-pipeline CSVs.
@@ -214,7 +214,7 @@ See [`CLAUDE.md`](CLAUDE.md) for a deeper architecture description.
 | Symptom | Fix |
 |---|---|
 | `OPENAI_API_KEY not found` during RAGAS | Create `.env` with the key (§1.2); inference still runs and raw JSONL is saved, only scoring fails. |
-| Connection refused to `127.0.0.1:11434` | Start Ollama (`ollama serve`) and confirm the three models are pulled. |
+| Connection refused to `127.0.0.1:11434` | Start Ollama (`ollama serve`) and confirm the required models are pulled. |
 | Ollama 500 on embeddings | Usually an over-long/malformed chunk; the embedder truncates to 15k chars and skips bad chunks automatically. |
 | `[ERROR] ... DB missing` in mini mode | Run the dataset's full benchmark once before using `mini`. |
 | QASPER `JSON not found` | Place `qasper-dev-v0.3.json` in `data/raw/` (§3). |
