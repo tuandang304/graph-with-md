@@ -197,7 +197,7 @@ src/
     generator.py             # hybrid retrieval (vector + graph traversal) + LLM generation
     evaluator.py             # RAGAS scoring via GPT-4o-mini
   baseline/                  # baseline pipeline (loader, embedder, generator)
-  ablation/p3_embedder.py    # graph-no-markdown embedder (fixed chunks + KG context)
+  ablation/graph_no_markdown_embedder.py # graph-no-markdown embedder (fixed chunks + KG context)
 data/          # all outputs (gitignored); QASPER source goes in data/raw/
   <dataset>/graph/           # _graph.json + _graph.graphml (NetworkX) per document
 docs/

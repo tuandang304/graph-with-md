@@ -23,7 +23,7 @@ All tasks completed and verified. ✅
   - [x] Subgraph traversal for Channel 2
   - [x] Hybrid prompt with structural + vector-retrieved context
 
-- [x] **5. Modify**: `src/ablation/p3_embedder.py`
+- [x] **5. Modify**: `src/ablation/graph_no_markdown_embedder.py`
   - [x] Same graph embedding changes as embedder.py
 
 - [x] **6. Modify**: `src/pipeline.py`

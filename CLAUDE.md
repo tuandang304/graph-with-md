@@ -48,7 +48,7 @@ src/                  # Pipeline source code
     embedder.py           — fixed-size chunks → ChromaDB
     generator.py          — flat retrieval + Llama generation
   ablation/               # Graph no markdown pipeline
-    p3_embedder.py        — fixed-size chunks + node-centric graph context → ChromaDB
+    graph_no_markdown_embedder.py — fixed-size chunks + node-centric graph context → ChromaDB
   pipeline.py             — legacy single-dataset Graph-with-markdown orchestrator (not used by experiments/)
   baseline_pipeline.py    — legacy single-dataset Baseline orchestrator (not used by experiments/)
 
@@ -132,7 +132,7 @@ QASPER JSON → QasperLoader → .md files
 
 **`src/components/embedder.py`** — Chunks markdown by `##` section boundaries (merges chunks < 400 chars), then generates **node-centric graph context** for each entity in the KnowledgeGraph (2-hop neighborhood descriptions). Chunk metadata: `{"paper_id": str, "type": "semantic_section"|"graph_context", "entity": str}`. Uses `upsert` so re-runs are safe.
 
-**`src/ablation/p3_embedder.py`** — Graph no markdown embedder. `RecursiveCharacterTextSplitter(chunk_size=1000)` on raw `.txt` + node-centric graph context from KnowledgeGraph. Chunk metadata type: `"baseline_chunk"` or `"graph_context"`. Same ChromaDB collection name (`qasper_graph_rag`) so Generator class works without changes.
+**`src/ablation/graph_no_markdown_embedder.py`** — Graph no markdown embedder. `RecursiveCharacterTextSplitter(chunk_size=1000)` on raw `.txt` + node-centric graph context from KnowledgeGraph. Chunk metadata type: `"baseline_chunk"` or `"graph_context"`. Same ChromaDB collection name (`qasper_graph_rag`) so Generator class works without changes.
 
 **`src/components/generator.py`** — Hybrid two-channel retrieval for Graph with markdown: Channel 1 = vector search for `semantic_section` chunks (`sem_k = max(top_k-3, 5)`). Channel 2 = **NetworkX structural traversal**: extracts query entities, matches them against graph nodes, performs 2-hop subgraph extraction, converts to structured text (e.g., `Entity "BERT": → (is_a) → Pre-trained LM`). Falls back to vector-retrieved `graph_context` chunks scoped to papers from Channel 1. New `graph_dir` parameter loads the KnowledgeGraph. Fallback to unfiltered retrieval when Channel 1 returns empty (Graph no markdown path). The `use_graph=False` flag powers the **Markdown only** ablation.
 

@@ -23,7 +23,7 @@ from src.components.embedder import Embedder
 from src.components.generator import Generator
 from src.baseline.embedder import BaselineEmbedder
 from src.baseline.generator import BaselineGenerator
-from src.ablation.p3_embedder import P3Embedder
+from src.ablation.graph_no_markdown_embedder import GraphNoMarkdownEmbedder
 from src.components.evaluator import Evaluator
 
 # --- CONFIG DIRS ---
@@ -126,8 +126,8 @@ def ingest_graphnomd(ollama: OllamaManager):
     if n > 0:
         print(f"Graph no markdown DB exists ({n} chunks). Skipping.")
         return
-    P3Embedder(ollama, txt_dir=BASE_PARSED_DIR, graph_dir=GRAPH_DIR,
-               db_dir=GRAPHNOMD_EMBED_DIR, model_name="bge-m3").process_all()
+    GraphNoMarkdownEmbedder(ollama, txt_dir=BASE_PARSED_DIR, graph_dir=GRAPH_DIR,
+                            db_dir=GRAPHNOMD_EMBED_DIR, model_name="bge-m3").process_all()
 
 
 def build_graphs(ollama: OllamaManager):
