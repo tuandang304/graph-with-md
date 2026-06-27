@@ -1,5 +1,5 @@
-"""
-Mini smoke test — verifies all three pipeline generators work correctly
+﻿"""
+Mini smoke test â€” verifies all three pipeline generators work correctly
 on the pre-built _smoketest ChromaDB collections (no Ollama/RAGAS required
 for the retrieval logic check; queries Ollama for generation).
 
@@ -139,7 +139,7 @@ def test_retrieval_only():
     ok, count = check_collection(db_dir, "qasper_graph_rag")
     if not ok or count == 0:
         print(f"  {SKIP} Graph with markdown smoketest DB not found at {db_dir}")
-        return False
+        return None
 
     import chromadb
     client = chromadb.PersistentClient(path=db_dir)
@@ -197,13 +197,13 @@ def test_baseline_generator():
     ok, count = check_collection(db_dir, "baseline_rag")
     if not ok or count == 0:
         print(f"  {SKIP} Baseline smoketest DB not found")
-        return False
+        return None
 
     try:
         from src.core.ollama_manager import OllamaManager
         from src.baseline.generator import BaselineGenerator
         ollama = OllamaManager()
-        gen = BaselineGenerator(ollama, db_dir, embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M")
+        gen = BaselineGenerator(ollama, db_dir, embed_model="bge-m3", llm_model="qwen2.5:7b")
         result = gen.query(TEST_QUESTION, top_k=5)
         ans = result["answer"]
         ctx = result["context"]
@@ -225,7 +225,7 @@ def test_graphnomd_generator():
     ok, count = check_collection(db_dir, "qasper_graph_rag")
     if not ok or count == 0:
         print(f"  {SKIP} Graph no markdown smoketest DB not found")
-        return False
+        return None
 
     try:
         from src.core.ollama_manager import OllamaManager
@@ -233,7 +233,7 @@ def test_graphnomd_generator():
         ollama = OllamaManager()
         # Pass graph_dir for NetworkX traversal (may not have .graphml in smoketest, that's OK)
         graph_dir = os.path.join(SMOKETEST_ROOT, "graph")
-        gen = Generator(ollama, db_dir, embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M",
+        gen = Generator(ollama, db_dir, embed_model="bge-m3", llm_model="qwen2.5:7b",
                         graph_dir=graph_dir if os.path.isdir(graph_dir) else None)
         result = gen.query(TEST_QUESTION, top_k=10)
         ans = result["answer"]
@@ -241,7 +241,7 @@ def test_graphnomd_generator():
         print(f"  Contexts retrieved: {len(ctx)}")
         print(f"  Answer preview: {ans[:200]}")
         # Graph no markdown has baseline_chunk (not semantic_section) + graph_context/graph_edge
-        # Channel 1 filter for semantic_section returns 0 → fallback activates
+        # Channel 1 filter for semantic_section returns 0 â†’ fallback activates
         assert len(ans) > 0, "Empty answer"
         print(f"  {PASS} Graph no markdown generator OK (fallback path for non-semantic chunks)")
         return True
@@ -258,7 +258,7 @@ def test_graphmd_generator():
     ok, count = check_collection(db_dir, "qasper_graph_rag")
     if not ok or count == 0:
         print(f"  {SKIP} Graph with markdown smoketest DB not found")
-        return False
+        return None
 
     try:
         from src.core.ollama_manager import OllamaManager
@@ -266,7 +266,7 @@ def test_graphmd_generator():
         ollama = OllamaManager()
         # Pass graph_dir for NetworkX traversal
         graph_dir = os.path.join(SMOKETEST_ROOT, "graph")
-        gen = Generator(ollama, db_dir, embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M",
+        gen = Generator(ollama, db_dir, embed_model="bge-m3", llm_model="qwen2.5:7b",
                         graph_dir=graph_dir if os.path.isdir(graph_dir) else None)
         result = gen.query(TEST_QUESTION, top_k=10)
         ans = result["answer"]

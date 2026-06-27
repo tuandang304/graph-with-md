@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import chromadb
 
@@ -13,13 +13,13 @@ class Generator:
 
     Hybrid two-channel retrieval (Graph with markdown):
       Channel 1: semantic_section chunks via vector search (primary evidence)
-      Channel 2: NetworkX graph traversal — extract query entities, perform multi-hop
+      Channel 2: NetworkX graph traversal â€” extract query entities, perform multi-hop
                  subgraph extraction, and convert to structured LLM context.
                  Falls back to vector-retrieved graph_context chunks if no entities match.
     Scoping prevents off-topic graph edges from diluting context_precision.
 
     Fallback (Graph no markdown): collection has baseline_chunk not semantic_section,
-    so Channel 1 filter returns empty → falls back to unfiltered retrieval.
+    so Channel 1 filter returns empty â†’ falls back to unfiltered retrieval.
 
     Markdown-only ablation (use_graph=False): reuses the Graph-with-markdown index but
     disables Channel 2, so retrieval returns only semantic_section chunks (the full top_k
@@ -34,7 +34,7 @@ class Generator:
     )
 
     def __init__(self, ollama_manager: OllamaManager, db_dir: str, embed_model: str = "bge-m3",
-                 llm_model: str = "qwen2.5:7b-instruct-q4_K_M", system_prompt: str = None,
+                 llm_model: str = "qwen2.5:7b", system_prompt: str = None,
                  use_graph: bool = True, graph_dir: str = None):
         self.ollama = ollama_manager
         self.db_dir = db_dir
@@ -75,7 +75,7 @@ class Generator:
             keep_alive=0  # CRITICAL
         )
 
-        # 2a. Channel 1 — retrieve semantic section chunks (primary text evidence)
+        # 2a. Channel 1 â€” retrieve semantic section chunks (primary text evidence)
         # Markdown-only (use_graph=False) spends the full budget on sections; the graph
         # pipeline reserves ~3 slots for graph edges retrieved in Channel 2.
         sem_k = top_k if not self.use_graph else max(top_k - 3, 5)
@@ -105,7 +105,7 @@ class Generator:
                 graph_text = self._graph_traversal(question)
             return self._generate_answer(question, all_contexts, all_contexts, [], graph_text)
 
-        # 2b. Channel 2 — Knowledge Graph structural traversal (NEW)
+        # 2b. Channel 2 â€” Knowledge Graph structural traversal (NEW)
         # First try multi-hop subgraph extraction via NetworkX.
         # Falls back to vector-retrieved graph_context chunks if no entities match.
         graph_text = ""
@@ -237,7 +237,7 @@ if __name__ == "__main__":
         manager,
         db_dir=os.path.join(_root, "data", "embeddings"),
         embed_model="bge-m3",
-        llm_model="qwen2.5:7b-instruct-q4_K_M",
+        llm_model="qwen2.5:7b",
         graph_dir=os.path.join(_root, "data", "graph")
     )
     # response = generator.query("What datasets did they experiment with?", top_k=3)

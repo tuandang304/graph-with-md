@@ -27,7 +27,13 @@
       "Bash(curl -s http://127.0.0.1:11434/api/tags)",
       "Bash(Measure-Object -Line)",
       "Bash(ls -la README.md)",
-      "Bash(wc -l README.md)"
+      "Bash(wc -l README.md)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); [print\\(m['name']\\) for m in d.get\\('models',[]\\)]\")",
+      "Bash(tasklist /fi \"imagename eq python.exe\")",
+      "Bash(xargs sed -i 's/qwen2\\\\.5:7b-instruct-q4_K_M/qwen2.5:7b/g')",
+      "Bash(ollama pull *)",
+      "PowerShell(& \"D:\\\\Ollama\\\\ollama.exe\" pull qwen2.5:7b-instruct-q4_K_M 2>&1)",
+      "PowerShell($embedBase = \"D:\\\\paper\\\\graph-with-md\\\\data\\\\hotpotqa\\\\embeddings\"; if \\(Test-Path $embedBase\\) { Remove-Item $embedBase -Recurse -Force -Confirm:$false; Write-Host \"Deleted: $embedBase\" } else { Write-Host \"Not found: $embedBase\" })"
     ]
   }
 }

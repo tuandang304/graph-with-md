@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import json
 from tqdm import tqdm
@@ -26,7 +26,7 @@ class GraphBuilder:
         "Do not include any wrapping markdown formatting like ```json. Limit to top 20 relationships."
     )
 
-    def __init__(self, ollama_manager: OllamaManager, input_dir: str, output_dir: str, model_name: str = "qwen2.5:7b-instruct-q4_K_M", system_prompt: str = None):
+    def __init__(self, ollama_manager: OllamaManager, input_dir: str, output_dir: str, model_name: str = "qwen2.5:7b", system_prompt: str = None):
         self.ollama = ollama_manager
         self.input_dir = input_dir
         self.output_dir = output_dir
@@ -38,7 +38,7 @@ class GraphBuilder:
 
         self.system_prompt = system_prompt if system_prompt is not None else self.DEFAULT_SYSTEM_PROMPT
 
-        # NetworkX Knowledge Graph — accumulates triplets across all papers
+        # NetworkX Knowledge Graph â€” accumulates triplets across all papers
         self.kg = KnowledgeGraph(self.output_dir)
 
     def build_graph_for_file(self, filename: str, keep_alive: int = 0):
@@ -47,7 +47,7 @@ class GraphBuilder:
         output_filepath = os.path.join(self.output_dir, f"{paper_id}_graph.json")
 
         if os.path.exists(output_filepath):
-            # JSON already exists — still load into NetworkX for downstream use
+            # JSON already exists â€” still load into NetworkX for downstream use
             self.kg.load_from_json(paper_id)
             # Persist .graphml if not already present
             graphml_path = os.path.join(self.output_dir, f"{paper_id}_graph.graphml")
@@ -119,7 +119,7 @@ if __name__ == "__main__":
         manager,
         input_dir=os.path.join(_root, "data", "parsed"),
         output_dir=os.path.join(_root, "data", "graph"),
-        model_name="qwen2.5:7b-instruct-q4_K_M"
+        model_name="qwen2.5:7b"
     )
 
     files = os.listdir(os.path.join(_root, "data", "parsed"))

@@ -1,6 +1,6 @@
-"""
-Natural Questions Benchmark — Baseline vs Graph no markdown vs Graph with markdown.
-Dataset: google-research-datasets/natural_questions validation split — 500 QA pairs (seed=42).
+﻿"""
+Natural Questions Benchmark â€” Baseline vs Graph no markdown vs Graph with markdown.
+Dataset: google-research-datasets/natural_questions validation split â€” 500 QA pairs (seed=42).
 Documents: Wikipedia articles. One .md/.txt file per NQ example id.
 
 Modes:
@@ -191,7 +191,7 @@ def _split_wikipedia_sections(raw_text: str) -> list:
 def load_naturalquestions() -> list:
     from datasets import load_dataset
     from itertools import islice
-    print(f"[Data] Loading Natural Questions validation split (streaming) — {'MINI' if MINI else 'full'} mode...")
+    print(f"[Data] Loading Natural Questions validation split (streaming) â€” {'MINI' if MINI else 'full'} mode...")
     ds   = load_dataset("google-research-datasets/natural_questions", split="validation", streaming=True)
     ds   = ds.shuffle(seed=SEED, buffer_size=10_000)
     data = list(islice(ds, SAMPLE_SIZE))
@@ -258,7 +258,7 @@ def _count(db_dir: str, col: str) -> int:
 
 def build_graphs(ollama: OllamaManager):
     print("\n" + "=" * 50)
-    print(">>> GRAPH BUILDING — Qwen 7B (NQ) <<<")
+    print(">>> GRAPH BUILDING â€” Qwen 7B (NQ) <<<")
     print("=" * 50)
     md_files   = [f for f in os.listdir(PARSED_DIR) if f.endswith(".md")]
     done_files = [f for f in os.listdir(GRAPH_DIR)  if f.endswith("_graph.json")]
@@ -268,14 +268,14 @@ def build_graphs(ollama: OllamaManager):
     print(f"Building graphs: {len(done_files)}/{len(md_files)} done...")
     GraphBuilder(
         ollama, PARSED_DIR, GRAPH_DIR,
-        model_name="qwen2.5:7b-instruct-q4_K_M",
+        model_name="qwen2.5:7b",
         system_prompt=NQ_GRAPH_PROMPT,
     ).process_all()
 
 
 def ingest_baseline(ollama: OllamaManager):
     print("\n" + "=" * 50)
-    print(">>> INGESTION — Baseline (NQ) <<<")
+    print(">>> INGESTION â€” Baseline (NQ) <<<")
     print("=" * 50)
     n = _count(BASE_EMBED_DIR, "baseline_rag")
     if n > 0:
@@ -286,7 +286,7 @@ def ingest_baseline(ollama: OllamaManager):
 
 def ingest_graphnomd(ollama: OllamaManager):
     print("\n" + "=" * 50)
-    print(">>> INGESTION — Graph no markdown (NQ) <<<")
+    print(">>> INGESTION â€” Graph no markdown (NQ) <<<")
     print("=" * 50)
     n = _count(GRAPHNOMD_EMBED_DIR, "qasper_graph_rag")
     if n > 0:
@@ -303,13 +303,13 @@ def ingest_graphnomd(ollama: OllamaManager):
 
 def ingest_graphmd(ollama: OllamaManager):
     print("\n" + "=" * 50)
-    print(">>> INGESTION — Graph with markdown (NQ) <<<")
+    print(">>> INGESTION â€” Graph with markdown (NQ) <<<")
     print("=" * 50)
     n = _count(EMBED_DIR, "qasper_graph_rag")
     if n > 0:
         print(f"Graph with markdown DB exists ({n} chunks). Skipping.")
         return
-    print("[Embedder] BGE-M3 — semantic sections + graph edges...")
+    print("[Embedder] BGE-M3 â€” semantic sections + graph edges...")
     Embedder(ollama, PARSED_DIR, GRAPH_DIR, EMBED_DIR, model_name="bge-m3").process_all()
 
 
@@ -335,29 +335,29 @@ def _load_existing_raw(path: str) -> tuple:
 
 def run_generation(ollama: OllamaManager, qa_list: list):
     print("\n" + "=" * 50)
-    print(f">>> GENERATION — All 3 Pipelines ({len(qa_list)} questions) <<<")
+    print(f">>> GENERATION â€” All 3 Pipelines ({len(qa_list)} questions) <<<")
     print("=" * 50)
 
     baseline_gen = BaselineGenerator(
         ollama, BASE_EMBED_DIR,
-        embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M",
+        embed_model="bge-m3", llm_model="qwen2.5:7b",
         system_prompt=NQ_BASELINE_PROMPT,
     )
     mdonly_gen = Generator(
         ollama, EMBED_DIR,
-        embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M",
+        embed_model="bge-m3", llm_model="qwen2.5:7b",
         system_prompt=NQ_SYSTEM_PROMPT,
         use_graph=False,
     )
     graphnomd_gen = Generator(
         ollama, GRAPHNOMD_EMBED_DIR,
-        embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M",
+        embed_model="bge-m3", llm_model="qwen2.5:7b",
         system_prompt=NQ_SYSTEM_PROMPT,
         graph_dir=GRAPH_DIR,
     )
     graphmd_gen = Generator(
         ollama, EMBED_DIR,
-        embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M",
+        embed_model="bge-m3", llm_model="qwen2.5:7b",
         system_prompt=NQ_SYSTEM_PROMPT,
         graph_dir=GRAPH_DIR,
     )
@@ -416,7 +416,7 @@ def run_generation(ollama: OllamaManager, qa_list: list):
         f_nomd.close()
         f_md.close()
 
-    print(f"\nGeneration complete — Baseline:{len(baseline_results)}, MDOnly:{len(mdonly_results)}, GraphNoMD:{len(graphnomd_results)}, GraphMD:{len(graphmd_results)}")
+    print(f"\nGeneration complete â€” Baseline:{len(baseline_results)}, MDOnly:{len(mdonly_results)}, GraphNoMD:{len(graphnomd_results)}, GraphMD:{len(graphmd_results)}")
     return baseline_results, mdonly_results, graphnomd_results, graphmd_results
 
 
@@ -466,7 +466,7 @@ def run_ragas(baseline_results, mdonly_results, graphnomd_results, graphmd_resul
 def print_comparison(scores: dict):
     metrics = ["faithfulness", "answer_relevancy", "context_precision", "context_recall"]
     print("\n" + "=" * 72)
-    print(f"  NATURAL QUESTIONS RESULTS ({'MINI — ' + str(SAMPLE_SIZE) + ' samples' if MINI else str(SAMPLE_SIZE) + ' samples'})")
+    print(f"  NATURAL QUESTIONS RESULTS ({'MINI â€” ' + str(SAMPLE_SIZE) + ' samples' if MINI else str(SAMPLE_SIZE) + ' samples'})")
     print("=" * 72)
     print(f"{'Pipeline':<30}" + "".join(f"{m[:10]:>12}" for m in metrics))
     print("-" * 72)
@@ -475,13 +475,13 @@ def print_comparison(scores: dict):
     print("=" * 72)
     if "Graph with markdown" in scores and "Graph no markdown" in scores:
         gmd, gnomd = scores["Graph with markdown"], scores["Graph no markdown"]
-        print("\n  Markdown effect — GraphMD vs GraphNoMD delta (positive = GraphMD better):")
+        print("\n  Markdown effect â€” GraphMD vs GraphNoMD delta (positive = GraphMD better):")
         for m in metrics:
             d = gmd.get(m, 0) - gnomd.get(m, 0)
             print(f"    {m:<22} {'+' if d >= 0 else ''}{d:.4f}")
     if "Graph with markdown" in scores and "Markdown only" in scores:
         gmd, mdo = scores["Graph with markdown"], scores["Markdown only"]
-        print("\n  Graph effect — GraphMD vs MarkdownOnly delta (positive = graph helps):")
+        print("\n  Graph effect â€” GraphMD vs MarkdownOnly delta (positive = graph helps):")
         for m in metrics:
             d = gmd.get(m, 0) - mdo.get(m, 0)
             print(f"    {m:<22} {'+' if d >= 0 else ''}{d:.4f}")

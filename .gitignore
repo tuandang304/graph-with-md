@@ -8,6 +8,7 @@ __pycache__/
 
 # Data & Databases
 data/
+old_result_data/
 *.db
 *.sqlite
 *.jsonl

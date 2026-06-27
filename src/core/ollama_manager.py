@@ -16,20 +16,31 @@ class OllamaManager:
 
     def _post_with_retry(self, url: str, payload: dict, retries: int = 3, backoff: float = 3.0,
                          retry_on_500: bool = False) -> requests.Response:
+        last_exc: Exception = RuntimeError("No attempts made")
         for attempt in range(retries):
             try:
                 response = requests.post(url, json=payload, timeout=300)
                 response.raise_for_status()
                 return response
             except requests.HTTPError:
-                # 500 = bad input or model crash — retrying same input won't help
+                # 500 = bad input or model crash — only retry if caller opts in
                 if response.status_code == 500 and retry_on_500 and attempt < retries - 1:
                     wait = backoff * (attempt + 1)
                     print(f"[Ollama] 500 error, retry {attempt+1}/{retries-1} after {wait:.0f}s...")
                     time.sleep(wait)
+                    last_exc = RuntimeError(f"HTTP 500 from {url}")
                     continue
                 raise
-        raise RuntimeError(f"Failed after {retries} retries: {url}")
+            except (requests.ConnectionError, requests.Timeout) as exc:
+                # Transient network / cold-start issue — always retry
+                last_exc = exc
+                if attempt < retries - 1:
+                    wait = backoff * (attempt + 1)
+                    print(f"[Ollama] Connection error ({exc.__class__.__name__}), retry {attempt+1}/{retries-1} after {wait:.0f}s...")
+                    time.sleep(wait)
+                    continue
+                raise
+        raise last_exc
 
     def generate(self, model: str, prompt: str, system: Optional[str] = None, options: Optional[Dict[str, Any]] = None, keep_alive: int = 0) -> str:
         url = f"{self.base_url}/api/generate"

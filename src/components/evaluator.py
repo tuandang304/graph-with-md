@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import pandas as pd
 from datasets import Dataset
@@ -35,8 +35,8 @@ class Evaluator:
         else:
             from langchain_community.chat_models import ChatOllama
             from langchain_community.embeddings import OllamaEmbeddings
-            print("Initializing Ragas Judge with Local LLM (qwen2.5:7b-instruct-q4_K_M) & Embeddings (bge-m3).")
-            self.eval_llm = ChatOllama(model="qwen2.5:7b-instruct-q4_K_M", temperature=0)
+            print("Initializing Ragas Judge with Local LLM (qwen2.5:7b) & Embeddings (bge-m3).")
+            self.eval_llm = ChatOllama(model="qwen2.5:7b", temperature=0)
             self.eval_embeddings = OllamaEmbeddings(model="bge-m3")
 
     def evaluate_dataframe(self, results: list) -> pd.DataFrame:

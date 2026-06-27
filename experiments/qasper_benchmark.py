@@ -1,6 +1,6 @@
-"""
-Qasper Benchmark — Baseline vs Graph no markdown vs Graph with markdown.
-Dataset: qasper-dev-v0.3.json — 355 QA pairs with free-form ground truth.
+﻿"""
+Qasper Benchmark â€” Baseline vs Graph no markdown vs Graph with markdown.
+Dataset: qasper-dev-v0.3.json â€” 355 QA pairs with free-form ground truth.
 Run: uv run python qasper_benchmark.py
 """
 import os
@@ -62,7 +62,7 @@ def extract_qa(json_path: str) -> list:
 
 
 def prepare_files():
-    """Parse QASPER JSON → .md and .txt files if not already done."""
+    """Parse QASPER JSON â†’ .md and .txt files if not already done."""
     json_path = os.path.join(RAW_DIR, SOURCE_JSON)
     md_count  = len([f for f in os.listdir(PARSED_DIR)  if f.endswith(".md")])
     txt_count = len([f for f in os.listdir(BASE_PARSED) if f.endswith(".txt")])
@@ -93,7 +93,7 @@ def _count(db_dir: str, col: str) -> int:
 
 def ingest_baseline(ollama: OllamaManager):
     print("\n" + "="*50)
-    print(">>> INGESTION — Baseline <<<")
+    print(">>> INGESTION â€” Baseline <<<")
     print("="*50)
     if _count(BASE_EMBED_DIR, "baseline_rag") > 0:
         print(f"Baseline DB exists ({_count(BASE_EMBED_DIR, 'baseline_rag')} chunks). Skipping.")
@@ -103,7 +103,7 @@ def ingest_baseline(ollama: OllamaManager):
 
 def ingest_graphnomd(ollama: OllamaManager):
     print("\n" + "="*50)
-    print(">>> INGESTION — Graph no markdown <<<")
+    print(">>> INGESTION â€” Graph no markdown <<<")
     print("="*50)
     GraphNoMarkdownEmbedder(ollama, txt_dir=BASE_PARSED, graph_dir=GRAPH_DIR,
                             db_dir=GRAPHNOMD_DIR, model_name="bge-m3").process_all()
@@ -111,16 +111,16 @@ def ingest_graphnomd(ollama: OllamaManager):
 
 def ingest_graphmd(ollama: OllamaManager):
     print("\n" + "="*50)
-    print(">>> INGESTION — Graph with markdown <<<")
+    print(">>> INGESTION â€” Graph with markdown <<<")
     print("="*50)
     if _count(EMBED_DIR, "qasper_graph_rag") > 0:
         print(f"Graph with markdown DB exists ({_count(EMBED_DIR, 'qasper_graph_rag')} chunks). Skipping.")
         return
 
     print("[1] GraphBuilder (Qwen 7B)...")
-    GraphBuilder(ollama, PARSED_DIR, GRAPH_DIR, model_name="qwen2.5:7b-instruct-q4_K_M").process_all()
+    GraphBuilder(ollama, PARSED_DIR, GRAPH_DIR, model_name="qwen2.5:7b").process_all()
 
-    print("\n[2] Embedder (BGE-M3) — semantic sections + graph edges...")
+    print("\n[2] Embedder (BGE-M3) â€” semantic sections + graph edges...")
     Embedder(ollama, PARSED_DIR, GRAPH_DIR, EMBED_DIR, model_name="bge-m3").process_all()
 
 
@@ -130,13 +130,13 @@ def ingest_graphmd(ollama: OllamaManager):
 
 def run_generation(ollama: OllamaManager, qa_list: list):
     print("\n" + "="*50)
-    print(f">>> GENERATION — All 3 Pipelines ({len(qa_list)} questions) <<<")
+    print(f">>> GENERATION â€” All 3 Pipelines ({len(qa_list)} questions) <<<")
     print("="*50)
 
-    baseline_gen  = BaselineGenerator(ollama, BASE_EMBED_DIR,  embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M")
-    mdonly_gen    = Generator(ollama, EMBED_DIR,                embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M", use_graph=False)
-    graphnomd_gen = Generator(ollama, GRAPHNOMD_DIR,            embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M", graph_dir=GRAPH_DIR)
-    graphmd_gen   = Generator(ollama, EMBED_DIR,                embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M", graph_dir=GRAPH_DIR)
+    baseline_gen  = BaselineGenerator(ollama, BASE_EMBED_DIR,  embed_model="bge-m3", llm_model="qwen2.5:7b")
+    mdonly_gen    = Generator(ollama, EMBED_DIR,                embed_model="bge-m3", llm_model="qwen2.5:7b", use_graph=False)
+    graphnomd_gen = Generator(ollama, GRAPHNOMD_DIR,            embed_model="bge-m3", llm_model="qwen2.5:7b", graph_dir=GRAPH_DIR)
+    graphmd_gen   = Generator(ollama, EMBED_DIR,                embed_model="bge-m3", llm_model="qwen2.5:7b", graph_dir=GRAPH_DIR)
 
     baseline_results, mdonly_results, graphnomd_results, graphmd_results = [], [], [], []
 
@@ -163,7 +163,7 @@ def run_generation(ollama: OllamaManager, qa_list: list):
     pd.DataFrame(mdonly_results).to_json(   os.path.join(RESULTS_DIR, "mdonly_raw.jsonl"),     orient="records", lines=True, force_ascii=False)
     pd.DataFrame(graphnomd_results).to_json(os.path.join(RESULTS_DIR, "graphnomd_raw.jsonl"),  orient="records", lines=True, force_ascii=False)
     pd.DataFrame(graphmd_results).to_json(  os.path.join(RESULTS_DIR, "graphmd_raw.jsonl"),    orient="records", lines=True, force_ascii=False)
-    print(f"\nRaw saved — Baseline:{len(baseline_results)}, MDOnly:{len(mdonly_results)}, GraphNoMD:{len(graphnomd_results)}, GraphMD:{len(graphmd_results)}")
+    print(f"\nRaw saved â€” Baseline:{len(baseline_results)}, MDOnly:{len(mdonly_results)}, GraphNoMD:{len(graphnomd_results)}, GraphMD:{len(graphmd_results)}")
 
     return baseline_results, mdonly_results, graphnomd_results, graphmd_results
 

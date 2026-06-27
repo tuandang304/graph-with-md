@@ -1,13 +1,12 @@
-"""
-HotpotQA Benchmark — Baseline vs Graph no markdown vs Graph with markdown.
-Dataset: HotpotQA Dev Distractor — 500 samples auto-downloaded.
+﻿"""
+HotpotQA Benchmark â€” Baseline vs Graph no markdown vs Graph with markdown.
+Dataset: HotpotQA Dev Distractor â€” 500 samples auto-downloaded.
 Run: uv run python hotpot_benchmark.py
 """
 import os
 import sys
 import json
 import random
-import urllib.request
 import pandas as pd
 from tqdm import tqdm
 import chromadb
@@ -40,7 +39,6 @@ RESULTS_DIR         = os.path.join(DATA_ROOT, "results")
 for d in [RAW_DIR, PARSED_DIR, BASE_PARSED_DIR, GRAPH_DIR, EMBED_DIR, BASE_EMBED_DIR, GRAPHNOMD_EMBED_DIR, RESULTS_DIR]:
     os.makedirs(d, exist_ok=True)
 
-HOTPOT_URL  = "http://curtis.ml.cmu.edu/datasets/hotpot/hotpot_dev_distractor_v1.json"
 HOTPOT_FILE = os.path.join(RAW_DIR, "hotpot_dev_distractor_v1.json")
 SAMPLE_SIZE = 500
 
@@ -50,12 +48,39 @@ SAMPLE_SIZE = 500
 # ------------------------------------------------------------------ #
 
 def download_hotpotqa():
-    if not os.path.exists(HOTPOT_FILE):
-        print(f"Downloading HotpotQA Dev Distractor...")
-        urllib.request.urlretrieve(HOTPOT_URL, HOTPOT_FILE)
-        print("Download complete.")
-    else:
+    """Download HotpotQA validation split via HuggingFace datasets.
+
+    The original CMU URL (http://curtis.ml.cmu.edu/...) is unreachable, so we
+    use the official hotpotqa/hotpot_qa dataset on HuggingFace and convert it
+    to the same JSON schema the rest of this script expects:
+      [{"_id": str, "question": str, "answer": str,
+        "context": [[title, [sentences]], ...]}, ...]
+    """
+    if os.path.exists(HOTPOT_FILE):
         print("HotpotQA file found.")
+        return
+
+    print("Downloading HotpotQA (distractor) via HuggingFace datasets...")
+    from datasets import load_dataset
+    ds = load_dataset("hotpotqa/hotpot_qa", "distractor", split="validation")
+
+    records = []
+    for item in tqdm(ds, desc="Converting HotpotQA"):
+        ctx_titles    = item["context"]["title"]
+        ctx_sentences = item["context"]["sentences"]
+        context = [[t, s] for t, s in zip(ctx_titles, ctx_sentences)]
+        records.append({
+            "_id":      item["id"],
+            "question": item["question"],
+            "answer":   item["answer"],
+            "context":  context,
+            "type":     item.get("type", ""),
+            "level":    item.get("level", ""),
+        })
+
+    with open(HOTPOT_FILE, "w", encoding="utf-8") as f:
+        json.dump(records, f, ensure_ascii=False)
+    print(f"Download complete. {len(records)} records saved to {HOTPOT_FILE}")
 
 
 def prepare_hotpot_data() -> list:
@@ -109,7 +134,7 @@ def _count(db_dir: str, col: str) -> int:
 
 def ingest_baseline(ollama: OllamaManager):
     print("\n" + "="*50)
-    print(">>> INGESTION — Baseline (HOTPOT) <<<")
+    print(">>> INGESTION â€” Baseline (HOTPOT) <<<")
     print("="*50)
     n = _count(BASE_EMBED_DIR, "baseline_rag")
     if n > 0:
@@ -120,7 +145,7 @@ def ingest_baseline(ollama: OllamaManager):
 
 def ingest_graphnomd(ollama: OllamaManager):
     print("\n" + "="*50)
-    print(">>> INGESTION — Graph no markdown (HOTPOT) <<<")
+    print(">>> INGESTION â€” Graph no markdown (HOTPOT) <<<")
     print("="*50)
     n = _count(GRAPHNOMD_EMBED_DIR, "qasper_graph_rag")
     if n > 0:
@@ -131,9 +156,9 @@ def ingest_graphnomd(ollama: OllamaManager):
 
 
 def build_graphs(ollama: OllamaManager):
-    """Build knowledge graphs — must run before graphnomd and graphmd ingestion."""
+    """Build knowledge graphs â€” must run before graphnomd and graphmd ingestion."""
     print("\n" + "="*50)
-    print(">>> GRAPH BUILDING — Qwen 7B (HOTPOT) <<<")
+    print(">>> GRAPH BUILDING â€” Qwen 7B (HOTPOT) <<<")
     print("="*50)
     md_files  = [f for f in os.listdir(PARSED_DIR) if f.endswith('.md')]
     done_files = [f for f in os.listdir(GRAPH_DIR)  if f.endswith('_graph.json')]
@@ -141,18 +166,18 @@ def build_graphs(ollama: OllamaManager):
         print(f"Graphs complete ({len(done_files)} files). Skipping.")
         return
     print(f"Building graphs: {len(done_files)}/{len(md_files)} done...")
-    GraphBuilder(ollama, PARSED_DIR, GRAPH_DIR, model_name="qwen2.5:7b-instruct-q4_K_M").process_all()
+    GraphBuilder(ollama, PARSED_DIR, GRAPH_DIR, model_name="qwen2.5:7b").process_all()
 
 
 def ingest_graphmd(ollama: OllamaManager):
     print("\n" + "="*50)
-    print(">>> INGESTION — Graph with markdown (HOTPOT) <<<")
+    print(">>> INGESTION â€” Graph with markdown (HOTPOT) <<<")
     print("="*50)
     n = _count(EMBED_DIR, "qasper_graph_rag")
     if n > 0:
         print(f"Graph with markdown DB exists ({n} chunks). Skipping.")
         return
-    print("[Embedder] BGE-M3 — semantic sections + graph edges...")
+    print("[Embedder] BGE-M3 â€” semantic sections + graph edges...")
     Embedder(ollama, PARSED_DIR, GRAPH_DIR, EMBED_DIR, model_name="bge-m3").process_all()
 
 
@@ -178,13 +203,13 @@ def _load_existing_raw(path: str) -> tuple:
 
 def run_generation(ollama: OllamaManager, qa_list: list):
     print("\n" + "="*50)
-    print(f">>> GENERATION — All 3 Pipelines ({len(qa_list)} questions) <<<")
+    print(f">>> GENERATION â€” All 3 Pipelines ({len(qa_list)} questions) <<<")
     print("="*50)
 
-    baseline_gen  = BaselineGenerator(ollama, BASE_EMBED_DIR,   embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M")
-    mdonly_gen    = Generator(ollama, EMBED_DIR,                 embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M", use_graph=False)
-    graphnomd_gen = Generator(ollama, GRAPHNOMD_EMBED_DIR,       embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M", graph_dir=GRAPH_DIR)
-    graphmd_gen   = Generator(ollama, EMBED_DIR,                 embed_model="bge-m3", llm_model="qwen2.5:7b-instruct-q4_K_M", graph_dir=GRAPH_DIR)
+    baseline_gen  = BaselineGenerator(ollama, BASE_EMBED_DIR,   embed_model="bge-m3", llm_model="qwen2.5:7b")
+    mdonly_gen    = Generator(ollama, EMBED_DIR,                 embed_model="bge-m3", llm_model="qwen2.5:7b", use_graph=False)
+    graphnomd_gen = Generator(ollama, GRAPHNOMD_EMBED_DIR,       embed_model="bge-m3", llm_model="qwen2.5:7b", graph_dir=GRAPH_DIR)
+    graphmd_gen   = Generator(ollama, EMBED_DIR,                 embed_model="bge-m3", llm_model="qwen2.5:7b", graph_dir=GRAPH_DIR)
 
     raw_paths = {
         "Baseline":            os.path.join(RESULTS_DIR, "baseline_raw.jsonl"),
@@ -201,7 +226,7 @@ def run_generation(ollama: OllamaManager, qa_list: list):
     if baseline_done or mdonly_done or graphnomd_done or graphmd_done:
         print(f"Resuming: Baseline={len(baseline_done)}, MDOnly={len(mdonly_done)}, GraphNoMD={len(graphnomd_done)}, GraphMD={len(graphmd_done)} already done.")
 
-    # Append mode — write each answer immediately so crashes don't lose progress
+    # Append mode â€” write each answer immediately so crashes don't lose progress
     f_base = open(raw_paths["Baseline"],            'a', encoding='utf-8')
     f_mdo  = open(raw_paths["Markdown only"],        'a', encoding='utf-8')
     f_nomd = open(raw_paths["Graph no markdown"],   'a', encoding='utf-8')
@@ -240,7 +265,7 @@ def run_generation(ollama: OllamaManager, qa_list: list):
         f_nomd.close()
         f_md.close()
 
-    print(f"\nGeneration complete — Baseline:{len(baseline_results)}, MDOnly:{len(mdonly_results)}, GraphNoMD:{len(graphnomd_results)}, GraphMD:{len(graphmd_results)}")
+    print(f"\nGeneration complete â€” Baseline:{len(baseline_results)}, MDOnly:{len(mdonly_results)}, GraphNoMD:{len(graphnomd_results)}, GraphMD:{len(graphmd_results)}")
     return baseline_results, mdonly_results, graphnomd_results, graphmd_results
 
 

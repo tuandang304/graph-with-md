@@ -1,4 +1,4 @@
-import os
+﻿import os
 import sys
 import chromadb
 
@@ -11,7 +11,7 @@ class BaselineGenerator:
     """
     DEFAULT_SYSTEM_PROMPT = "You are an AI assistant. Answer based on the provided context. If unavailable, say Unknown."
 
-    def __init__(self, ollama_manager: OllamaManager, db_dir: str, embed_model: str = "bge-m3", llm_model: str = "qwen2.5:7b-instruct-q4_K_M", system_prompt: str = None):
+    def __init__(self, ollama_manager: OllamaManager, db_dir: str, embed_model: str = "bge-m3", llm_model: str = "qwen2.5:7b", system_prompt: str = None):
         self.ollama = ollama_manager
         self.db_dir = db_dir
         self.embed_model = embed_model
