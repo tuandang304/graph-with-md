@@ -221,7 +221,7 @@ def test_baseline_generator():
 def test_graphnomd_generator():
     """Test Graph no markdown Generator (fixed chunks + graph, reuses Generator class)."""
     print("\n--- [3] Graph no markdown Generator ---")
-    db_dir = os.path.join(SMOKETEST_ROOT, "p3_embeddings")
+    db_dir = os.path.join(SMOKETEST_ROOT, "graph_no_markdown_embeddings")
     ok, count = check_collection(db_dir, "qasper_graph_rag")
     if not ok or count == 0:
         print(f"  {SKIP} Graph no markdown smoketest DB not found")
